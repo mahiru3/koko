@@ -1,6 +1,9 @@
 const MAX_DIM = 1280;
 const MAX_CHARS = 380000;
 const SVG_MAX = 300000;
+const KEEP_MAX = 380000;
+const TIMES_RE = /[×x✕]\s*\d+\s*$/i;
+const SKILL_RE = /^\s*(?:CCB?|1D100|CC)\s*<=\s*(\d+)\s*[【〈《\[]([^】〉》\]]+)[】〉》\]]/i;
 
 export function assetKey(name) {
   return String(name).replace(/[.#$\[\]\/]/g, "_");
@@ -27,9 +30,11 @@ async function encode(bmp, max, q) {
 }
 
 export async function compressImage(blob, type, max) {
+  const original = await blobToDataUrl(new Blob([blob], { type }));
   if (type === "image/svg+xml") {
-    const url = await blobToDataUrl(new Blob([blob], { type }));
-    if (url.length <= SVG_MAX) return url;
+    if (original.length <= SVG_MAX) return original;
+  } else if (/^image\/(gif|png|apng|webp|jpeg)$/.test(type) && original.length <= KEEP_MAX) {
+    return original;
   }
   const bmp = await createImageBitmap(new Blob([blob], { type }));
   let dim = max || MAX_DIM;
@@ -150,4 +155,53 @@ export async function readRoomZip(file, onProgress) {
   const usesCCB = JSON.stringify(e.characters || {}).includes("CCB") || JSON.stringify(e.items || {}).includes("CCB");
 
   return { assets, chars, items, markers: markers(room.markers), scenes, notes, vars, board, usesCCB };
+}
+
+function looseParse(text) {
+  const t = String(text).trim().replace(/^\uFEFF/, "");
+  try {
+    return JSON.parse(t);
+  } catch (e) {
+    return JSON.parse(t.replace(/\r?\n/g, "\\n"));
+  }
+}
+
+export function parseCharJson(text) {
+  const raw = looseParse(text);
+  const list = Array.isArray(raw) ? raw : [raw];
+  return list
+    .map((o) => (o && o.data && typeof o.data === "object" ? o.data : o))
+    .filter((d) => d && typeof d === "object" && (d.name || d.commands || d.status))
+    .map((d) => {
+      let commands = String(d.commands || "");
+      if (commands.includes("\\n") && !commands.includes("\n")) commands = commands.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+      const status = (Array.isArray(d.status) ? d.status : [])
+        .filter((s) => s && s.label && !TIMES_RE.test(String(s.label)))
+        .map((s) => ({ label: String(s.label), value: Number(s.value) || 0, max: Number(s.max) || 0 }));
+      const params = (Array.isArray(d.params) ? d.params : [])
+        .filter((p) => p && p.label)
+        .map((p) => ({ label: String(p.label), value: String(p.value ?? "") }));
+      const have = new Set(params.map((p) => p.label));
+      commands.split("\n").forEach((line) => {
+        const m = line.match(SKILL_RE);
+        if (!m) return;
+        const label = m[2].trim();
+        if (label && !have.has(label) && !TIMES_RE.test(label)) {
+          params.push({ label, value: m[1] });
+          have.add(label);
+        }
+      });
+      return {
+        name: String(d.name || "名前なし").slice(0, 60),
+        color: /^#[0-9a-f]{3,8}$/i.test(d.color || "") ? d.color : "#888888",
+        commands,
+        status,
+        params,
+        memo: String(d.memo || ""),
+        initiative: Number(d.initiative) || 0,
+        externalUrl: typeof d.externalUrl === "string" && d.externalUrl.startsWith("https://") ? d.externalUrl : "",
+        w: Number(d.width) || 4,
+        h: Number(d.height) || 4
+      };
+    });
 }
