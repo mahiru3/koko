@@ -1,12 +1,12 @@
-import { firebaseConfig } from "./51-session-config.js?v=4b";
+import { firebaseConfig } from "./51-session-config.js?v=4c";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, onChildAdded,
   onChildRemoved, query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
-} from "./51-session-fb.js?v=4b";
-import { parseTekeyJson, renderPalette, expandVars } from "./51-session-palette.js?v=4b";
-import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4b";
-import { ensureProfile } from "./51-session-id.js?v=4b";
+} from "./51-session-fb.js?v=4c";
+import { parseTekeyJson, renderPalette, expandVars, moveLine } from "./51-session-palette.js?v=4c";
+import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4c";
+import { ensureProfile } from "./51-session-id.js?v=4c";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -16,6 +16,9 @@ const UNIT = 24;
 const PAD = 6;
 const CHAR_Z = 100;
 const FG_Z = 1;
+const CH_TABS = [["main", "メイン"], ["info", "情報"], ["talk", "雑談"]];
+const CHECK_RE = /^(\s*S?(?:CCB?|CC|1D100)\s*(?:\(\d+\))?\s*<=\s*)([^\s　]+)/i;
+const MOBILE = matchMedia("(max-width: 800px)");
 
 const S = {
   db: null, uid: null, roomId: "", name: "", color: "#4a90d9",
@@ -25,8 +28,16 @@ const S = {
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
   speaker: "", selChar: "", palettes: [], palSel: "",
   pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false,
-  isKP: false, isOwner: false, kpOpen: true, selItem: "", selMarker: "", off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {}
+  isKP: false, isOwner: false, kpOpen: true, selItem: "", selMarker: "", off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {},
+  chatTab: "main", msgs: [], unread: {}, popReady: false, bonus: null, palPlace: {}, palPick: -1, palClosed: new Set(), cbOrder: [], wins: {}, winZ: 60
 };
+
+function applyTheme() {
+  const light = localStorage.getItem("s51-theme") === "light";
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+  const b = $("themeBtn");
+  if (b) b.textContent = light ? "ダーク" : "ライト";
+}
 
 function kpCheck() {
   const m = S.meta || {};
@@ -45,8 +56,25 @@ function canEdit(c) {
   return !!c && (S.isKP || c.owner === S.pid);
 }
 
-function canSeeStatus(c) {
-  return !!c && (!c.hideStatus || S.isKP || c.owner === S.pid);
+function visBase(c) {
+  return isStand(c) && c.parent && S.chars[c.parent] ? S.chars[c.parent] : c;
+}
+
+function showsParams(c) {
+  return visBase(c).showParams !== false;
+}
+
+function showsOther(c) {
+  const b = visBase(c);
+  return b.showOther !== undefined ? b.showOther !== false : !b.hideStatus;
+}
+
+function canSeeParams(c) {
+  return !!c && (S.isKP || c.owner === S.pid || showsParams(c));
+}
+
+function canSeeOther(c) {
+  return !!c && (S.isKP || c.owner === S.pid || showsOther(c));
 }
 
 function el(tag, cls, text) {
@@ -203,6 +231,8 @@ async function connect() {
 
 async function startRoom() {
   initTabs();
+  initKeep();
+  initWindows();
   initPaste();
   await initSystems();
   initPresence().catch((e) => setStatus("参加者の登録に失敗しました: " + e.message, true));
@@ -217,6 +247,11 @@ async function startRoom() {
   });
   onChildAdded(rp("assets"), (s) => { S.assets.set(s.key, s.val()); queueRender(); updateAssetInfo(); queueAssetUi(); });
   onChildRemoved(rp("assets"), (s) => { S.assets.delete(s.key); queueRender(); updateAssetInfo(); queueAssetUi(); });
+  $("ctBonus").addEventListener("change", () => {
+    const n = Math.max(1, Math.min(99, parseInt($("ctBonus").value, 10) || 20));
+    $("ctBonus").value = n;
+    set(rp("meta/ctBonus"), n);
+  });
   onValue(rp("meta"), (s) => {
     const raw = s.val();
     if (!raw && S.metaSeen) setStatus("この部屋は削除されたか、空になりました", true);
@@ -237,6 +272,8 @@ async function startRoom() {
     if ((S.meta.system || "DiceBot") !== S.systemId) loadSystem(S.meta.system || "DiceBot");
     $("fieldMult").value = String(S.meta.fieldMult || 4);
     $("gridShow").checked = !!(S.meta.board && S.meta.board.displayGrid);
+    if (document.activeElement !== $("ctBonus")) $("ctBonus").value = ctBonus();
+    renderBonus();
     renderVars();
     queueRender();
   });
@@ -266,6 +303,101 @@ function showTab(name) {
   side.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
   side.querySelectorAll(".panel").forEach((p) => { p.hidden = p !== panel; });
   if (name === "chat") scrollLog(true);
+}
+
+function initKeep() {
+  document.querySelectorAll("details[data-keep]").forEach((d) => {
+    const k = "s51-open-" + d.dataset.keep;
+    const v = localStorage.getItem(k);
+    if (v !== null) d.open = v === "1";
+    d.addEventListener("toggle", () => localStorage.setItem(k, d.open ? "1" : "0"));
+  });
+}
+
+function isPc() {
+  return !MOBILE.matches;
+}
+
+function winNode(k) {
+  return $(k === "kp" ? "kpSide" : "plSide");
+}
+
+function saveWins() {
+  localStorage.setItem("s51-wins", JSON.stringify(S.wins));
+}
+
+function applyWins() {
+  const pc = isPc();
+  ["kp", "pl"].forEach((k) => {
+    const node = winNode(k);
+    const w = pc && S.wins[k];
+    node.classList.toggle("floating", !!w);
+    if (w) {
+      const vw = innerWidth;
+      const vh = innerHeight;
+      w.w = Math.max(260, Math.min(w.w, vw));
+      w.h = Math.max(200, Math.min(w.h, vh - 8));
+      w.x = Math.max(0, Math.min(w.x, vw - 80));
+      w.y = Math.max(0, Math.min(w.y, vh - w.h));
+      Object.assign(node.style, { left: w.x + "px", top: w.y + "px", width: w.w + "px", height: w.h + "px" });
+    } else {
+      Object.assign(node.style, { left: "", top: "", width: "", height: "", zIndex: "" });
+    }
+  });
+  const room = $("room");
+  room.classList.toggle("kp-float", pc && !!S.wins.kp);
+  room.classList.toggle("pl-float", pc && !!S.wins.pl);
+  $("layoutReset").hidden = !(pc && (S.wins.kp || S.wins.pl));
+  queueRender();
+}
+
+function initWindows() {
+  try { S.wins = JSON.parse(localStorage.getItem("s51-wins") || "{}") || {}; } catch (e) { S.wins = {}; }
+  $("layoutReset").addEventListener("click", () => { S.wins = {}; saveWins(); applyWins(); });
+  MOBILE.addEventListener("change", applyWins);
+  window.addEventListener("resize", () => { if (isPc() && (S.wins.kp || S.wins.pl)) applyWins(); });
+  document.querySelectorAll(".grip").forEach((g) => {
+    const k = g.dataset.win;
+    const node = winNode(k);
+    let st = null;
+    g.addEventListener("pointerdown", (e) => {
+      if (!isPc() || e.button !== 0) return;
+      e.preventDefault();
+      const r = node.getBoundingClientRect();
+      if (!S.wins[k]) { S.wins[k] = { x: r.left, y: r.top, w: r.width, h: Math.min(r.height, Math.round(innerHeight * 0.7)) }; applyWins(); }
+      st = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: S.wins[k].x, oy: S.wins[k].y };
+      node.style.zIndex = String(++S.winZ);
+      g.setPointerCapture(e.pointerId);
+    });
+    g.addEventListener("pointermove", (e) => {
+      if (!st || st.id !== e.pointerId) return;
+      S.wins[k].x = st.ox + e.clientX - st.x;
+      S.wins[k].y = st.oy + e.clientY - st.y;
+      node.style.left = S.wins[k].x + "px";
+      node.style.top = S.wins[k].y + "px";
+    });
+    const end = (e) => {
+      if (!st || st.id !== e.pointerId) return;
+      st = null;
+      applyWins();
+      saveWins();
+    };
+    g.addEventListener("pointerup", end);
+    g.addEventListener("pointercancel", end);
+    node.addEventListener("pointerdown", () => { if (node.classList.contains("floating")) node.style.zIndex = String(++S.winZ); });
+    let t = 0;
+    new ResizeObserver(() => {
+      const w = S.wins[k];
+      if (!w || !node.classList.contains("floating")) return;
+      const r = node.getBoundingClientRect();
+      if (Math.abs(r.width - w.w) < 1 && Math.abs(r.height - w.h) < 1) return;
+      w.w = r.width;
+      w.h = r.height;
+      clearTimeout(t);
+      t = setTimeout(saveWins, 300);
+    }).observe(node);
+  });
+  applyWins();
 }
 
 function applyKpLayout() {
@@ -366,7 +498,7 @@ function renderPlayers() {
     li.append(head);
     if (S.isKP && p.pid) {
       const own = sorted(S.chars, "order").filter(([, c]) => c.owner === p.pid);
-      li.append(el("div", "player-chars", own.length ? own.map(([, c]) => (c.name || "（名前なし）") + (isStand(c) ? "（立ち絵）" : "")).join("、") : "駒なし"));
+      li.append(own.length ? charVisList(own) : el("div", "player-chars", "駒なし"));
     }
     list.append(li);
   });
@@ -374,11 +506,32 @@ function renderPlayers() {
     const free = sorted(S.chars, "order").filter(([, c]) => !c.owner || !S.players[c.owner]);
     if (free.length) {
       const li = el("li", "player");
-      li.append(el("div", "player-head", "持ち主なし（KP管理）"), el("div", "player-chars", free.map(([, c]) => c.name || "（名前なし）").join("、")));
+      li.append(el("div", "player-head", "持ち主なし（KP管理）"), charVisList(free));
       list.append(li);
     }
   }
   $("memberCount").textContent = Object.keys(S.online).length + "人";
+}
+
+function charVisList(entries) {
+  const box = el("div", "player-chars");
+  entries.forEach(([id, c]) => {
+    const row = el("div", "vis-row");
+    row.append(el("span", "vis-name", (c.name || "（名前なし）") + (isStand(c) ? "（立ち絵）" : "")));
+    if (!isStand(c)) {
+      const btn = (label, on, patch) => {
+        const b = el("button", "mini vis" + (on ? " on" : ""), label + "：" + (on ? "表示" : "非表示"));
+        b.type = "button";
+        b.title = "ほかのPLに見せるかどうか（持ち主とKPには常に見えます）";
+        b.addEventListener("click", () => update(rp("chars/" + id), patch(!on)).catch((e) => setStatus("保存失敗: " + e.message, true)));
+        row.append(b);
+      };
+      btn("パラメータ", showsParams(c), (v) => ({ showParams: v }));
+      btn("ほか", showsOther(c), (v) => ({ showOther: v, hideStatus: null }));
+    }
+    box.append(row);
+  });
+  return box;
 }
 
 async function toggleKp(pid, on) {
@@ -428,10 +581,104 @@ function initChat() {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(input.value); }
   });
   S.speaker = localStorage.getItem("s51-speaker-" + S.roomId) || "";
-  onChildAdded(query(rp("messages"), limitToLast(LOG_LIMIT)), (snap) => renderMessage(snap.val()));
+  try { S.cbOrder = JSON.parse(localStorage.getItem("s51-cborder-" + S.roomId) || "[]"); } catch (e) { S.cbOrder = []; }
+  try { S.palPlace = JSON.parse(localStorage.getItem("s51-palplace-" + S.roomId) || "{}"); } catch (e) { S.palPlace = {}; }
+  $("chatTabs").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => switchChatTab(b.dataset.ch)));
+  const q = query(rp("messages"), limitToLast(LOG_LIMIT));
+  onChildAdded(q, (snap) => renderMessage(snap.val()));
+  onValue(q, () => { S.popReady = true; }, { onlyOnce: true });
+  renderBonus();
+}
+
+function tabOf(m) {
+  return CH_TABS.some(([k]) => k === (m && m.tab)) ? m.tab : "main";
+}
+
+function tabName(k) {
+  const t = CH_TABS.find(([x]) => x === k);
+  return t ? t[1] : "メイン";
+}
+
+function switchChatTab(k) {
+  S.chatTab = k;
+  S.unread[k] = false;
+  renderChatTabs();
+  const log = $("log");
+  log.replaceChildren();
+  S.msgs.filter((m) => tabOf(m) === k).forEach((m) => log.append(messageNode(m)));
+  scrollLog(true);
+}
+
+function renderChatTabs() {
+  $("chatTabs").querySelectorAll("button").forEach((b) => {
+    b.classList.toggle("on", b.dataset.ch === S.chatTab);
+    b.classList.toggle("unread", !!S.unread[b.dataset.ch] && b.dataset.ch !== S.chatTab);
+  });
+}
+
+function ctBonus() {
+  const n = parseInt(S.meta && S.meta.ctBonus, 10);
+  return n > 0 ? n : 20;
+}
+
+function ctStatus(c) {
+  if (!c) return null;
+  const st = (c.status || []).find((s) => normLabel(s.label) === "CT");
+  return st ? st : null;
+}
+
+function renderBonus() {
+  ["chatBonus", "palBonus"].forEach((mid) => {
+    const box = $(mid);
+    if (!box) return;
+    box.replaceChildren();
+    box.append(el("span", "bonus-title", "次の判定"));
+    [10, 20, 30].forEach((n) => {
+      const on = !!S.bonus && !S.bonus.ct && S.bonus.n === n;
+      const b = el("button", "mini" + (on ? " on" : ""), "＋" + n);
+      b.type = "button";
+      b.title = "次のCCB判定1回だけ、目標値に＋" + n + "します（もう一度押すと取り消し）";
+      b.addEventListener("click", () => { S.bonus = on ? null : { n, ct: false }; renderBonus(); });
+      box.append(b);
+    });
+    const c = speakerChar();
+    const ct = ctStatus(c);
+    const n = ctBonus();
+    const onCt = !!S.bonus && S.bonus.ct;
+    const cb = el("button", "mini ct" + (onCt ? " on" : ""), "CT使用（＋" + n + "）" + (ct ? "残り" + ct.value : ""));
+    cb.type = "button";
+    cb.disabled = !onCt && (!ct || !(+ct.value > 0) || !canEdit(c));
+    cb.title = !c ? "発言キャラを選んでください" : !ct ? "発言キャラのステータスに「CT」がありません" : !(+ct.value > 0) ? "CTが0なので使えません" : "CTを1減らして、次のCCB判定1回だけ＋" + n + "します（判定を送ったときに減ります）";
+    cb.addEventListener("click", () => { S.bonus = onCt ? null : { n, ct: true }; renderBonus(); });
+    box.append(cb);
+    if (S.bonus) {
+      box.append(el("span", "bonus-on", "＋" + S.bonus.n + (S.bonus.ct ? "（CT）" : "") + " 待機中"));
+      const x = el("button", "mini", "×");
+      x.type = "button";
+      x.title = "取り消す";
+      x.addEventListener("click", () => { S.bonus = null; renderBonus(); });
+      box.append(x);
+    }
+  });
+}
+
+function renderMyStatus() {
+  const c = speakerChar();
+  ["myStatus", "palStatus"].forEach((mid) => {
+    const box = $(mid);
+    if (!box) return;
+    box.replaceChildren();
+    const list = c && !isStand(c) ? c.status || [] : [];
+    box.hidden = !list.length;
+    list.forEach((st) => {
+      const chip = el("span", "st-chip", st.label + " " + st.value + (st.max ? "/" + st.max : ""));
+      box.append(chip);
+    });
+  });
 }
 
 function setSpeaker(id) {
+  if (S.bonus && S.bonus.ct && id !== S.speaker) S.bonus = null;
   S.speaker = id;
   localStorage.setItem("s51-speaker-" + S.roomId, id);
   const c = S.chars[id];
@@ -440,39 +687,72 @@ function setSpeaker(id) {
   renderPaletteTabs();
 }
 
+function speakerEntries() {
+  const list = sorted(S.chars, "order")
+    .filter(([id, c]) => !isStand(c) && visibleChar(c) && ((S.isKP && S.showAllChars) || c.owner === S.pid || (id === S.speaker && canEdit(c))));
+  const pos = (id) => { const i = S.cbOrder.indexOf(id); return i < 0 ? 1e9 : i; };
+  return list.map((e, i) => [e, i]).sort((a, b) => (pos(a[0][0]) - pos(b[0][0])) || (a[1] - b[1])).map((x) => x[0]);
+}
+
+function moveSpeakerOrder(from, to) {
+  const ids = speakerEntries().map(([id]) => id);
+  const a = ids.indexOf(from);
+  const b = ids.indexOf(to);
+  if (a < 0 || b < 0 || a === b) return;
+  ids.splice(a, 1);
+  ids.splice(b, 0, from);
+  S.cbOrder = ids.concat(S.cbOrder.filter((x) => !ids.includes(x)));
+  localStorage.setItem("s51-cborder-" + S.roomId, JSON.stringify(S.cbOrder));
+  renderSpeaker();
+}
+
 function renderSpeaker() {
-  const bar = $("charBar");
   if (S.speaker && !S.chars[S.speaker]) S.speaker = "";
-  bar.replaceChildren();
-  const mk = (id, name, icon, color) => {
-    const b = el("button", "cb" + (S.speaker === id ? " on" : ""));
-    b.type = "button";
-    b.title = name;
-    if (icon) {
-      const im = el("img");
-      im.alt = "";
-      im.dataset.asset = icon;
-      im.src = src(icon);
-      b.append(im);
-    } else {
-      const f = el("span", "cb-fb", (name || "?").slice(0, 1));
-      f.style.background = color || "#888";
-      b.append(f);
+  const entries = speakerEntries();
+  ["charBar", "palChars"].forEach((bid) => {
+    const bar = $(bid);
+    if (!bar) return;
+    bar.replaceChildren();
+    let drag = "";
+    const mk = (id, name, icon, color) => {
+      const b = el("button", "cb" + (S.speaker === id ? " on" : ""));
+      b.type = "button";
+      b.title = name;
+      if (icon) {
+        const im = el("img");
+        im.alt = "";
+        im.draggable = false;
+        im.dataset.asset = icon;
+        im.src = src(icon);
+        b.append(im);
+      } else {
+        const f = el("span", "cb-fb", (name || "?").slice(0, 1));
+        f.style.background = color || "#888";
+        b.append(f);
+      }
+      b.append(el("span", "cb-name", name));
+      b.addEventListener("click", () => setSpeaker(id));
+      if (id && isPc()) {
+        b.draggable = true;
+        b.addEventListener("dragstart", (e) => { drag = id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", id); });
+        b.addEventListener("dragover", (e) => { if (drag && drag !== id) { e.preventDefault(); b.classList.add("drop"); } });
+        b.addEventListener("dragleave", () => b.classList.remove("drop"));
+        b.addEventListener("drop", (e) => { e.preventDefault(); b.classList.remove("drop"); if (drag) moveSpeakerOrder(drag, id); drag = ""; });
+        b.addEventListener("dragend", () => { drag = ""; });
+      }
+      bar.append(b);
+    };
+    mk("", S.name, "", S.color);
+    entries.forEach(([id, c]) => mk(id, c.name || "（名前なし）", charIcon(c), c.color));
+    if (S.isKP) {
+      const t = el("button", "cb-toggle", S.showAllChars ? "自分のだけ" : "全キャラ");
+      t.type = "button";
+      t.addEventListener("click", () => { S.showAllChars = !S.showAllChars; renderSpeaker(); });
+      bar.append(t);
     }
-    b.append(el("span", "cb-name", name));
-    b.addEventListener("click", () => setSpeaker(id));
-    bar.append(b);
-  };
-  mk("", S.name, "", S.color);
-  sorted(S.chars, "order")
-    .filter(([id, c]) => !isStand(c) && visibleChar(c) && ((S.isKP && S.showAllChars) || c.owner === S.pid || (id === S.speaker && canEdit(c))))
-    .forEach(([id, c]) => mk(id, c.name || "（名前なし）", charIcon(c), c.color));
-  if (S.isKP) {
-    const t = el("button", "cb-toggle", S.showAllChars ? "自分のだけ" : "全キャラ");
-    t.type = "button";
-    t.addEventListener("click", () => { S.showAllChars = !S.showAllChars; renderSpeaker(); });
-    bar.append(t);
-  }
+  });
+  renderMyStatus();
+  renderBonus();
 }
 
 async function submit(raw) {
@@ -480,7 +760,7 @@ async function submit(raw) {
   if (!text) return;
   $("chatInput").value = "";
   try {
-    await sendChat(text, S.speaker);
+    await sendChat(text, S.speaker, S.chatTab);
   } catch (e) {
     $("chatInput").value = text;
     setStatus("送信失敗: " + e.message, true);
@@ -547,10 +827,10 @@ function resultClass(r) {
 }
 
 async function postSystem(text) {
-  await push(rp("messages"), { uid: S.uid, name: "system", color: "#888888", text: text.slice(0, 2000), sys: true, t: serverTimestamp() });
+  await push(rp("messages"), { uid: S.uid, name: "system", color: "#888888", text: text.slice(0, 2000), sys: true, tab: "main", t: serverTimestamp() });
 }
 
-async function sendChat(rawText, charId0) {
+async function sendChat(rawText, charId0, place) {
   const charId = S.chars[charId0] && canEdit(S.chars[charId0]) ? charId0 : "";
   const c = S.chars[charId] || null;
   let text = rawText;
@@ -571,6 +851,18 @@ async function sendChat(rawText, charId0) {
       text = text.replace(/^[ \u3000]+/, "").replace(/[ \u3000]+$/, "");
       await update(rp("chars/" + charId), { face: hit.label });
       if (!text.trim()) return;
+    }
+  }
+  let used = null;
+  if (S.bonus && CHECK_RE.test(text.split("\n")[0])) {
+    const ct = S.bonus.ct ? ctStatus(c) : null;
+    if (S.bonus.ct && !(ct && +ct.value > 0 && canEdit(c))) {
+      setStatus("CTが使えないため、ボーナスなしで振りました（発言キャラのCTを確認してください）", true);
+    } else {
+      used = S.bonus;
+      const lines = text.split("\n");
+      lines[0] = lines[0].replace(CHECK_RE, (a, head, target) => head + target + "+" + used.n);
+      text = lines.join("\n");
     }
   }
   const expanded = expandVars(text, lookupVars(c));
@@ -599,6 +891,7 @@ async function sendChat(rawText, charId0) {
     name: (c ? c.name : S.name) || S.name,
     color: c ? c.color || S.color : S.color,
     text: expanded.slice(0, 2000),
+    tab: CH_TABS.some(([k]) => k === place) ? place : S.chatTab,
     t: serverTimestamp()
   };
   if (icon) msg.icon = icon;
@@ -618,6 +911,18 @@ async function sendChat(rawText, charId0) {
     msg.sys2 = S.systemId;
     if (r.secret) msg.secret = true;
   }
+  if (used && r) {
+    S.bonus = null;
+    renderBonus();
+    if (used.ct) {
+      const st = (c.status || []).map((x) => ({ ...x }));
+      const i = st.findIndex((x) => normLabel(x.label) === "CT");
+      const before = +st[i].value || 0;
+      st[i].value = before - 1;
+      await update(rp("chars/" + charId), { status: st });
+      msg.dice = (msg.dice + "\n［CT使用 ＋" + used.n + "：" + st[i].label + " " + before + " → " + (before - 1) + "］").slice(0, 2000);
+    }
+  }
   await push(rp("messages"), msg);
 }
 
@@ -631,9 +936,7 @@ function scrollLog(force) {
   if (force || nearBottom()) log.scrollTop = log.scrollHeight;
 }
 
-function renderMessage(m) {
-  if (!m) return;
-  const stick = nearBottom();
+function messageNode(m) {
   const li = el("li", "msg-item" + (m.sys ? " sys" : ""));
   const body = el("div", "msg-body");
   if (m.icon) {
@@ -654,10 +957,52 @@ function renderMessage(m) {
     if (m.dice) body.append(el("div", "dice " + (m.res || ""), (m.secret ? "[S] " : "") + m.dice));
   }
   li.append(body);
-  const log = $("log");
-  log.append(li);
-  while (log.children.length > LOG_LIMIT) log.firstElementChild.remove();
-  if (stick || m.uid === S.uid) scrollLog(true);
+  return li;
+}
+
+function renderMessage(m) {
+  if (!m) return;
+  S.msgs.push(m);
+  if (S.msgs.length > LOG_LIMIT) S.msgs.shift();
+  const k = tabOf(m);
+  if (k === S.chatTab) {
+    const stick = nearBottom();
+    const log = $("log");
+    log.append(messageNode(m));
+    while (log.children.length > LOG_LIMIT) log.firstElementChild.remove();
+    if (stick || m.uid === S.uid) scrollLog(true);
+  } else if (S.popReady) {
+    S.unread[k] = true;
+    renderChatTabs();
+  }
+  if (S.popReady && m.uid !== S.uid && !m.sys) popMessage(m);
+}
+
+function popMessage(m) {
+  const box = $("popups");
+  const p = el("div", "pop");
+  if (m.icon) {
+    const im = el("img", "avatar");
+    im.alt = "";
+    im.dataset.asset = m.icon;
+    im.src = src(m.icon);
+    p.append(im);
+  }
+  const body = el("div", "pop-body");
+  const who = el("div", "who", (tabOf(m) !== "main" ? "［" + tabName(tabOf(m)) + "］" : "") + (m.name || "?"));
+  who.style.color = m.color || "#ccc";
+  const hidden = m.secret && m.uid !== S.uid;
+  const t = hidden ? "シークレットダイス" : [m.text || "", m.dice || ""].filter(Boolean).join("\n");
+  body.append(who, el("div", "pop-text", t.length > 140 ? t.slice(0, 140) + "…" : t));
+  const x = el("button", "pop-x", "×");
+  x.type = "button";
+  x.title = "閉じる";
+  x.addEventListener("click", (e) => { e.stopPropagation(); p.remove(); });
+  p.append(body, x);
+  p.addEventListener("click", () => { p.remove(); showTab("chat"); switchChatTab(tabOf(m)); });
+  box.append(p);
+  const max = isPc() ? 3 : 1;
+  while (box.children.length > max) box.firstElementChild.remove();
 }
 
 function refreshAvatars() {
@@ -853,7 +1198,7 @@ function drawObject({ kind, id, o }) {
     node.querySelector(".label").textContent = isStand(o) ? "" : o.name || "";
     const bars = node.querySelector(".bars");
     bars.replaceChildren();
-    if (!isStand(o) && canSeeStatus(o)) {
+    if (!isStand(o) && canSeeOther(o)) {
       (o.status || []).slice(0, 4).forEach((st) => {
         const row = el("div", "sbar");
         const fill = el("span", "bar-fill");
@@ -933,7 +1278,7 @@ function bindPointer(node) {
 
 function onObjectClick(kind, id, o) {
   if (o.click) {
-    sendChat(o.click, S.speaker).catch((err) => setStatus("送信失敗: " + err.message, true));
+    sendChat(o.click, S.speaker, S.chatTab).catch((err) => setStatus("送信失敗: " + err.message, true));
     return;
   }
   if (kind === "chars") {
@@ -1248,7 +1593,8 @@ function initChars() {
   field("cdName", "name");
   field("cdColor", "color");
   field("cdActive", "active", (e) => e.checked);
-  field("cdHide", "hideStatus", (e) => e.checked);
+  $("cdShowParams").addEventListener("change", () => { if (S.selChar && S.isKP) update(rp("chars/" + S.selChar), { showParams: $("cdShowParams").checked }); });
+  $("cdShowOther").addEventListener("change", () => { if (S.selChar && S.isKP) update(rp("chars/" + S.selChar), { showOther: $("cdShowOther").checked, hideStatus: null }); });
   field("cdLock", "locked", (e) => e.checked);
   $("cdOwner").addEventListener("change", () => {
     if (!S.selChar || !S.isKP) return;
@@ -1307,7 +1653,7 @@ async function duplicateChar() {
     name: kind === "stand" ? (src0.name || "").slice(0, 60) : (src0.name || "").slice(0, 56) + "（複製）",
     color: src0.color || "#888888", icon: src0.icon || "", faces: src0.faces || [], set: src0.set || null, face: src0.face || null,
     ...centerPos(n, n), z: CHAR_Z, w: n, h: n, owner: S.pid, active: true, order: Date.now(),
-    kpOnly: !!src0.kpOnly, locked: false, hideStatus: !!src0.hideStatus
+    kpOnly: !!src0.kpOnly, locked: false, showParams: showsParams(src0), showOther: showsOther(src0)
   };
   const c = kind === "stand"
     ? { ...base, kind: "stand", parent: parentId, status: [], params: [], commands: "", memo: "" }
@@ -1325,7 +1671,7 @@ async function addChar() {
     name: name.slice(0, 60), color: $("pieceColor").value,
     ...centerPos(4, 4), z: CHAR_Z,
     w: 4, h: 4, kind: "char", owner: S.pid, status: [{ label: "HP", value: 10, max: 10 }, { label: "MP", value: 10, max: 10 }, { label: "SAN", value: 50, max: 99 }],
-    params: [], commands: "", memo: "", active: true, order: Date.now()
+    params: [], commands: "", memo: "", active: true, order: Date.now(), showParams: false, showOther: false
   };
   try {
     $("pieceAdd").disabled = true;
@@ -1415,7 +1761,7 @@ async function importChars(text, say) {
     if (img.saved) notes.push(img.saved);
     const c = {
       ...base, ...centerPos(base.w, base.h, i), z: CHAR_Z, kind: "char",
-      active: true, hideStatus: false, owner: S.pid, order: Date.now() + i
+      active: true, showParams: false, showOther: false, owner: S.pid, order: Date.now() + i
     };
     if (img.set) c.set = img.set;
     last = (await push(rp("chars"), c)).key;
@@ -1485,7 +1831,8 @@ function renderCharDetail() {
   $("charDetail").hidden = !c;
   if (!c) return;
   const stand = isStand(c);
-  const seeSt = canSeeStatus(c);
+  const seeP = canSeeParams(c);
+  const seeO = canSeeOther(c);
   const edit = canEdit(c);
   document.querySelectorAll("#charDetail input, #charDetail select, #charDetail textarea, #charDetail .st button, #cdAddStatus, #cdAddParam").forEach((n) => {
     if (!n.closest(".dup")) n.disabled = !edit;
@@ -1494,8 +1841,15 @@ function renderCharDetail() {
   $("cdReadonly").hidden = edit;
   document.querySelectorAll("#charDetail .char-only").forEach((n) => { n.hidden = stand; });
   document.querySelectorAll("#charDetail .kp-only-ui").forEach((n) => { n.hidden = !S.isKP; });
-  $("cdStatusBox").hidden = stand || !seeSt;
-  $("cdHiddenNote").hidden = stand || seeSt;
+  $("cdShowParams").closest("label").hidden = stand || !S.isKP;
+  $("cdShowOther").closest("label").hidden = stand || !S.isKP;
+  $("cdStatusBox").hidden = stand || !seeO;
+  $("cdParamBox").hidden = stand || !seeP;
+  $("cdCmdField").hidden = stand || !seeO;
+  $("cdFaceBox").hidden = !seeO;
+  const hid = [!stand && !seeP ? "パラメータ" : "", !seeO ? (stand ? "差分" : "ステータス・チャパレ・差分") : ""].filter(Boolean);
+  $("cdHiddenNote").hidden = !hid.length;
+  $("cdHiddenNote").textContent = "この駒の" + hid.join("と") + "は隠されています";
   const parent = stand && c.parent ? S.chars[c.parent] : null;
   $("cdParent").hidden = !stand;
   $("cdSpeak").hidden = stand || !edit;
@@ -1546,7 +1900,8 @@ function renderCharDetail() {
   } else {
     setSel.value = c.set ? c.set.sid : "";
   }
-  $("cdHide").checked = !!c.hideStatus;
+  $("cdShowParams").checked = showsParams(c);
+  $("cdShowOther").checked = showsOther(c);
 
   const faces = $("cdFaces");
   faces.replaceChildren();
@@ -1620,10 +1975,14 @@ function savePalettes() {
   localStorage.setItem(palStoreKey(), JSON.stringify(S.palettes));
 }
 
+function savePalPlace() {
+  localStorage.setItem("s51-palplace-" + S.roomId, JSON.stringify(S.palPlace));
+}
+
 function initPalettes() {
   try { S.palettes = JSON.parse(localStorage.getItem(palStoreKey()) || "[]"); } catch (e) { S.palettes = []; }
   if (!S.palettes.length) {
-    S.palettes = [{ id: "p0", label: "自分用", name: "", stock: "###よく使う\nCCB<=50 【目星】\nCCB<=50 【聞き耳】\n1d100<={SAN} 【正気度ロール】\n###\n:SAN-1\n:HP-1" }];
+    S.palettes = [{ id: "p0", label: "自分用", name: "", place: "", stock: "###よく使う\nCCB<=50 【目星】\nCCB<=50 【聞き耳】\n1d100<={SAN} 【正気度ロール】\n###\n:SAN-1\n:HP-1" }];
     savePalettes();
   }
   S.palSel = S.palettes[0].id;
@@ -1638,7 +1997,7 @@ function initPalettes() {
     renderPaletteTabs();
   });
   $("palNew").addEventListener("click", () => {
-    const p = { id: "p" + newKey(), label: "新規", name: "", stock: "" };
+    const p = { id: "p" + newKey(), label: "新規", name: "", place: "", stock: "" };
     S.palettes.push(p);
     S.palSel = p.id;
     savePalettes();
@@ -1654,6 +2013,18 @@ function initPalettes() {
     savePalettes();
     renderPaletteTabs();
   });
+  $("palSave").addEventListener("click", () => {
+    const names = { main: "メイン", info: "情報", talk: "雑談" };
+    const data = { palettes: S.palettes.map((p, i) => ({ label: p.label, name: p.name, stock: p.stock, order: i, place: names[p.place] || "" })) };
+    const a = el("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+    a.download = "koko-chatpalette-" + S.roomId + ".json";
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    $("palMsg").textContent = "チャパレをファイルに書き出しました";
+  });
   const bindEdit = (id, key) => $(id).addEventListener("input", () => {
     const p = S.palettes.find((x) => x.id === S.palSel);
     if (!p) return;
@@ -1664,13 +2035,47 @@ function initPalettes() {
   bindEdit("palLabel", "label");
   bindEdit("palName", "name");
   bindEdit("palStock", "stock");
+  $("palPlace").addEventListener("change", () => {
+    const v = $("palPlace").value;
+    const p = S.palettes.find((x) => x.id === S.palSel);
+    if (p) { p.place = v; savePalettes(); } else { S.palPlace[S.palSel] = v; savePalPlace(); }
+  });
+  $("palSend").addEventListener("click", () => sendPalInput());
+  $("palInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendPalInput(); }
+  });
   renderPaletteTabs();
+}
+
+function curPalette() {
+  return allPalettes().find((p) => p.id === S.palSel) || null;
+}
+
+function palWho(cur) {
+  if (!cur) return S.speaker;
+  return cur.id.startsWith("char:") ? cur.id.slice(5) : (cur.name && charByName(cur.name)) || S.speaker;
+}
+
+function palSendTo(cmd) {
+  const cur = curPalette();
+  const place = cur ? cur.place || "" : "";
+  return sendChat(cmd, palWho(cur), place || S.chatTab).catch((err) => setStatus("送信失敗: " + err.message, true));
+}
+
+async function sendPalInput() {
+  const v = $("palInput").value.replace(/\s+$/, "");
+  if (!v) return;
+  $("palInput").value = "";
+  await palSendTo(v);
 }
 
 function allPalettes() {
   const list = S.palettes.map((p) => ({ ...p, local: true }));
   const c = speakerChar();
-  if (c && c.commands) list.push({ id: "char:" + S.speaker, label: "駒: " + (c.name || ""), name: c.name || "", stock: c.commands, local: false });
+  if (c && c.commands) {
+    const id = "char:" + S.speaker;
+    list.push({ id, label: "駒: " + (c.name || ""), name: c.name || "", stock: c.commands, place: S.palPlace[id] || "", local: false, edit: canEdit(c) });
+  }
   return list;
 }
 
@@ -1679,16 +2084,38 @@ function renderPaletteTabs() {
   box.replaceChildren();
   const list = allPalettes();
   if (!list.find((p) => p.id === S.palSel) && list[0]) S.palSel = list[0].id;
+  let drag = "";
   list.forEach((p) => {
     const b = el("button", p.id === S.palSel ? "on" : "", p.label || "（無題）");
     b.type = "button";
-    b.addEventListener("click", () => { S.palSel = p.id; renderPaletteTabs(); });
+    b.addEventListener("click", () => { if (S.palSel !== p.id) S.palPick = -1; S.palSel = p.id; renderPaletteTabs(); });
+    if (p.local && isPc()) {
+      b.draggable = true;
+      b.addEventListener("dragstart", (e) => { drag = p.id; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); });
+      b.addEventListener("dragover", (e) => { if (drag && drag !== p.id) { e.preventDefault(); b.classList.add("drop"); } });
+      b.addEventListener("dragleave", () => b.classList.remove("drop"));
+      b.addEventListener("drop", (e) => {
+        e.preventDefault();
+        b.classList.remove("drop");
+        const a = S.palettes.findIndex((x) => x.id === drag);
+        const t = S.palettes.findIndex((x) => x.id === p.id);
+        drag = "";
+        if (a < 0 || t < 0 || a === t) return;
+        const [x] = S.palettes.splice(a, 1);
+        S.palettes.splice(t, 0, x);
+        savePalettes();
+        renderPaletteTabs();
+      });
+      b.addEventListener("dragend", () => { drag = ""; });
+    }
     box.append(b);
   });
   const cur = list.find((p) => p.id === S.palSel);
   const editable = cur && cur.local;
   $("palEdit").disabled = !editable;
   $("palDel").disabled = !editable;
+  $("palPlace").disabled = !cur;
+  if (document.activeElement !== $("palPlace")) $("palPlace").value = cur ? cur.place || "" : "";
   if (!editable) $("palEditor").hidden = true;
   if (editable && !$("palEditor").hidden) {
     if (document.activeElement !== $("palLabel")) $("palLabel").value = cur.label;
@@ -1698,14 +2125,39 @@ function renderPaletteTabs() {
   renderPaletteView();
 }
 
+function movePaletteLine(from, to) {
+  const cur = curPalette();
+  if (!cur) return;
+  const next = moveLine(cur.stock, from, to);
+  if (next === cur.stock) return;
+  S.palPick = -1;
+  if (cur.local) {
+    const p = S.palettes.find((x) => x.id === cur.id);
+    p.stock = next;
+    savePalettes();
+    if (!$("palEditor").hidden && document.activeElement !== $("palStock")) $("palStock").value = next;
+    renderPaletteView();
+  } else if (cur.edit) {
+    update(rp("chars/" + cur.id.slice(5)), { commands: next }).catch((e) => setStatus("保存失敗: " + e.message, true));
+  }
+}
+
 function renderPaletteView() {
-  const cur = allPalettes().find((p) => p.id === S.palSel);
+  const cur = curPalette();
   const view = $("palView");
-  if (!cur) { view.replaceChildren(); return; }
-  const who = () => (cur.id.startsWith("char:") ? cur.id.slice(5) : (cur.name && charByName(cur.name)) || S.speaker);
+  $("palInput").placeholder = isPc() ? "行を選ぶとここに入ります（ダブルクリックですぐ送信）" : "行をタップするとすぐ送信します";
+  if (!cur) { view.replaceChildren(); S.palSig = ""; return; }
+  const sig = [cur.id, cur.stock, S.palPick, isPc(), cur.local || cur.edit].join("\u0001");
+  if (sig === S.palSig && view.childElementCount) return;
+  S.palSig = sig;
   renderPalette(cur.stock, view, el, {
-    fill: (cmd) => { $("chatInput").value = cmd; showTab("chat"); $("chatInput").focus(); },
-    send: (cmd) => sendChat(cmd, who()).catch((err) => setStatus("送信失敗: " + err.message, true))
+    closed: S.palClosed,
+    picked: S.palPick,
+    movable: isPc() && (cur.local || cur.edit),
+    tapSend: () => !isPc(),
+    select: (cmd, li) => { S.palPick = li; $("palInput").value = cmd; },
+    send: (cmd) => palSendTo(cmd),
+    move: movePaletteLine
   });
 }
 
@@ -1814,4 +2266,9 @@ async function importZip(e) {
 }
 
 document.body.classList.add("booted");
+applyTheme();
+$("themeBtn").addEventListener("click", () => {
+  localStorage.setItem("s51-theme", document.documentElement.dataset.theme === "light" ? "dark" : "light");
+  applyTheme();
+});
 initJoin();

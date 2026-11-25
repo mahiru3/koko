@@ -107,7 +107,8 @@ export async function readRoomZip(file, onProgress) {
       commands: c.commands || "",
       memo: c.memo || "",
       active: c.active !== false,
-      hideStatus: !!c.hideStatus,
+      showParams: false,
+      showOther: false,
       order: +c.order || 0
     };
   });

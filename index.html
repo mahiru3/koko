@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>koko</title>
-<link rel="stylesheet" href="51-session.css?v=4b">
-<script src="51-session-bcdice.js?v=4b"></script>
-<script src="51-session-jszip.js?v=4b"></script>
-<script type="module" src="51-session.js?v=4b"></script>
+<link rel="stylesheet" href="51-session.css?v=4c">
+<script src="51-session-bcdice.js?v=4c"></script>
+<script src="51-session-jszip.js?v=4c"></script>
+<script type="module" src="51-session.js?v=4c"></script>
 </head>
 <body>
 <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -39,7 +39,9 @@
     <span id="memberCount" class="count"></span>
     <span id="status" class="status"></span>
     <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
-    <span class="ver">v4b</span>
+    <button id="themeBtn" type="button" class="theme-btn">ライト</button>
+    <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
+    <span class="ver">v4c</span>
   </header>
 
   <section id="boardWrap" class="board-wrap">
@@ -49,9 +51,11 @@
       </div>
     </div>
   </section>
+  <div id="popups" class="popups"></div>
 
   <aside id="kpSide" class="side kp-side" hidden>
     <nav class="tabs">
+      <span class="grip" data-win="kp" title="ドラッグでウィンドウにして動かす">⠿</span>
       <span class="tabs-title">KP</span>
       <button type="button" data-tab="notes" class="on">テキスト</button>
       <button type="button" data-tab="room">部屋</button>
@@ -101,6 +105,11 @@
         <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・テキストを置き換える</label>
         <p id="zipMsg" class="msg"></p>
       </details>
+      <details class="acc-color-2">
+        <summary>CT使用（クリチケ）</summary>
+        <label class="field">「CT使用」で次の判定1回に足す値<input id="ctBonus" type="number" min="1" max="99" inputmode="numeric"></label>
+        <p class="msg">PLが「CT使用」を押すと、発言キャラのステータス「CT」が1減り、次のCCB判定の目標値にこの値が足されます</p>
+      </details>
       <details class="acc-color-1">
         <summary>ルーム変数</summary>
         <ul id="varList" class="mlist"></ul>
@@ -122,16 +131,24 @@
     </div>
   </aside>
 
-  <aside class="side pl-side">
+  <aside id="plSide" class="side pl-side">
     <nav class="tabs">
+      <span class="grip" data-win="pl" title="ドラッグでウィンドウにして動かす">⠿</span>
       <button type="button" data-tab="chat" class="on">チャット</button>
       <button type="button" data-tab="palette">チャパレ</button>
       <button type="button" data-tab="chars">キャラ</button>
     </nav>
 
     <div id="tab-chat" class="panel">
+      <nav id="chatTabs" class="chat-tabs">
+        <button type="button" data-ch="main" class="on">メイン</button>
+        <button type="button" data-ch="info">情報</button>
+        <button type="button" data-ch="talk">雑談</button>
+      </nav>
       <ol id="log" class="log"></ol>
       <div id="charBar" class="char-bar"></div>
+      <div id="myStatus" class="my-status" hidden></div>
+      <div id="chatBonus" class="bonus"></div>
       <div class="send">
         <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
         <button id="sendBtn" type="button" class="primary">送信</button>
@@ -139,20 +156,42 @@
     </div>
 
     <div id="tab-palette" class="panel" hidden>
+      <details class="pal-sec acc-color-2" data-keep="palchars" open>
+        <summary>キャラ</summary>
+        <div id="palChars" class="char-bar"></div>
+        <div id="palStatus" class="my-status" hidden></div>
+      </details>
+      <label class="pal-place">発言場所
+        <select id="palPlace">
+          <option value="">未指定（チャットで選んでいるタブ）</option>
+          <option value="main">メイン</option>
+          <option value="info">情報</option>
+          <option value="talk">雑談</option>
+        </select>
+      </label>
+      <div class="send">
+        <textarea id="palInput" rows="2" placeholder="行を選ぶとここに入ります（ダブルクリックですぐ送信）"></textarea>
+        <button id="palSend" type="button" class="primary">送信</button>
+      </div>
+      <div id="palBonus" class="bonus"></div>
       <div class="pal-tabs" id="palTabs"></div>
-      <div class="pal-tools">
-        <label class="file-btn">Tekey JSON読込<input id="tekeyFile" type="file" accept=".json,application/json" multiple></label>
-        <button id="palNew" type="button">新規</button>
-        <button id="palEdit" type="button">編集</button>
-        <button id="palDel" type="button" class="del">削除</button>
-      </div>
-      <p id="palMsg" class="msg"></p>
-      <div id="palEditor" class="pal-editor" hidden>
-        <input id="palLabel" maxlength="40" placeholder="タブ名">
-        <input id="palName" maxlength="60" placeholder="発言キャラ名（空なら選択中のキャラ）">
-        <textarea id="palStock" rows="10" spellcheck="false"></textarea>
-      </div>
       <div id="palView" class="pal-view"></div>
+      <details class="pal-sec pc-only acc-color-4" data-keep="paltools">
+        <summary>取込・編集</summary>
+        <div class="pal-tools">
+          <label class="file-btn">Tekey JSON読込<input id="tekeyFile" type="file" accept=".json,application/json" multiple></label>
+          <button id="palNew" type="button">新規</button>
+          <button id="palEdit" type="button">編集</button>
+          <button id="palDel" type="button" class="del">削除</button>
+          <button id="palSave" type="button">セーブ（JSON書き出し）</button>
+        </div>
+        <p id="palMsg" class="msg"></p>
+        <div id="palEditor" class="pal-editor" hidden>
+          <input id="palLabel" maxlength="40" placeholder="タブ名">
+          <input id="palName" maxlength="60" placeholder="発言キャラ名（空なら選択中のキャラ）">
+          <textarea id="palStock" rows="10" spellcheck="false"></textarea>
+        </div>
+      </details>
     </div>
 
     <div id="tab-chars" class="panel" hidden>
@@ -182,7 +221,6 @@
           <input id="cdName" maxlength="60">
           <input id="cdColor" type="color">
         </div>
-        <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
         <p id="cdParent" class="msg" hidden></p>
         <p id="cdReadonly" class="msg" hidden>ほかの人の駒です（見るだけ。盤面で動かすことはできます）</p>
         <label class="field kp-only-ui">持ち主（KPだけ変更できる）<select id="cdOwner"></select></label>
@@ -193,19 +231,28 @@
         <div class="checks">
           <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
           <label class="check"><input id="cdLock" type="checkbox">駒を固定（動かせなくする）</label>
-          <label class="check char-only"><input id="cdHide" type="checkbox">ステータスを隠す（持ち主とKPだけに見える）</label>
+          <label class="check char-only kp-only-ui"><input id="cdShowParams" type="checkbox">パラメータをほかのPLに見せる</label>
+          <label class="check char-only kp-only-ui"><input id="cdShowOther" type="checkbox">パラメータ以外（ステータス・チャパレ・差分）をほかのPLに見せる</label>
           <label class="check kp-only-ui"><input id="cdKpOnly" type="checkbox">KPだけに見える駒にする</label>
         </div>
-        <div id="cdFaces" class="faces"></div>
-        <p id="cdHiddenNote" class="msg" hidden>この駒のステータスは隠されています</p>
-        <div id="cdStatusBox" class="char-only">
+        <p id="cdHiddenNote" class="msg" hidden></p>
+        <details id="cdFaceBox" class="cd-sec acc-color-2" data-keep="cdface" open>
+          <summary>差分</summary>
+          <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
+          <div id="cdFaces" class="faces"></div>
+        </details>
+        <details id="cdStatusBox" class="cd-sec char-only acc-color-1" data-keep="cdstatus" open>
+          <summary>ステータス</summary>
           <table class="st"><tbody id="cdStatus"></tbody></table>
           <button id="cdAddStatus" type="button">ステータス追加</button>
+        </details>
+        <details id="cdParamBox" class="cd-sec char-only acc-color-3" data-keep="cdparam">
+          <summary>パラメータ</summary>
           <table class="st"><tbody id="cdParams"></tbody></table>
           <button id="cdAddParam" type="button">パラメータ追加</button>
-        </div>
+        </details>
         <label class="field">メモ<textarea id="cdMemo" rows="3"></textarea></label>
-        <label class="field char-only">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
+        <label id="cdCmdField" class="field char-only">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
         <div class="dup">
           <span>複製</span>
           <select id="dupType">

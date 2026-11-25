@@ -1,14 +1,15 @@
-import { firebaseConfig } from "./51-session-config.js?v=4b";
+import { firebaseConfig } from "./51-session-config.js?v=4c";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, serverTimestamp, connectDatabaseEmulator
-} from "./51-session-fb.js?v=4b";
-import { ensureProfile, applyTransfer, transferCode, rand } from "./51-session-id.js?v=4b";
-import { compressImage } from "./51-session-import.js?v=4b";
+} from "./51-session-fb.js?v=4c";
+import { ensureProfile, applyTransfer, transferCode, rand } from "./51-session-id.js?v=4c";
+import { compressImage } from "./51-session-import.js?v=4c";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,19}$/;
+document.documentElement.dataset.theme = localStorage.getItem("s51-theme") === "light" ? "light" : "dark";
 const M = { db: null, uid: "", pid: "", code: "", sets: {}, files: {}, sel: "", replacing: null, picked: new Set() };
 
 function el(tag, cls, text) {
