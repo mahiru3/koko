@@ -1,0 +1,190 @@
+.my-body {
+  overflow: auto;
+}
+
+.my {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.my-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.my-head h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.btn-link {
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 5px 10px;
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.btn-link:hover {
+  border-color: var(--accent);
+}
+
+.my-box {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+details.my-box > summary {
+  font-size: 14px;
+}
+
+.set-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.set-tabs .pal-tabs {
+  flex: 1;
+}
+
+.set-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.id-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.id-field input {
+  width: 120px;
+}
+
+.drop {
+  position: relative;
+  border: 2px dashed var(--line);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  color: var(--sub);
+  cursor: pointer;
+}
+
+.drop.over,
+.drop:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.faces-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.faces-table th {
+  text-align: left;
+  font-weight: 400;
+  color: var(--sub);
+  font-size: 12px;
+  padding: 4px;
+}
+
+.faces-table td {
+  padding: 4px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+.faces-table input {
+  width: 100%;
+}
+
+.faces-table .pv {
+  padding: 2px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.faces-table .pv img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.faces-table .ops {
+  white-space: nowrap;
+  width: 76px;
+}
+
+.faces-table .ops button {
+  padding: 2px 8px;
+}
+
+@media (max-width: 560px) {
+  .faces-table thead {
+    display: none;
+  }
+
+  .faces-table tr {
+    display: grid;
+    grid-template-columns: 1fr 72px;
+    grid-template-areas:
+      "label pv"
+      "name pv"
+      "ops ops";
+    border-top: 1px solid var(--line);
+    padding: 6px 0;
+  }
+
+  .faces-table td {
+    border-top: 0;
+  }
+
+  .faces-table td:nth-child(1) {
+    grid-area: label;
+  }
+
+  .faces-table td:nth-child(2) {
+    grid-area: name;
+  }
+
+  .faces-table td:nth-child(3) {
+    grid-area: pv;
+  }
+
+  .faces-table td:nth-child(4) {
+    grid-area: ops;
+    width: auto;
+  }
+
+  .faces-table input {
+    font-size: 16px;
+  }
+}
