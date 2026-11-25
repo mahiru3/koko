@@ -9,6 +9,7 @@
 <script type="module" src="51-my.js"></script>
 </head>
 <body class="my-body">
+<p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
 <main class="my">
   <header class="my-head">
     <h1>マイ画像</h1>
@@ -47,15 +48,22 @@
         <span>画像をここにドラッグ、またはクリックして選ぶ（まとめて選べます）</span>
         <input id="files" type="file" accept="image/*" multiple>
       </label>
+      <div class="row wrap">
+        <label class="check"><input id="selAll" type="checkbox">すべて選択</label>
+        <button id="selDel" type="button" class="del" disabled>選択した画像を削除</button>
+      </div>
       <p id="setMsg" class="msg"></p>
       <table class="faces-table">
-        <thead><tr><th>呼び出し名</th><th>ファイル名</th><th>画像</th><th></th></tr></thead>
+        <thead><tr><th></th><th>呼び出し名</th><th>ファイル名</th><th>画像</th><th></th></tr></thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
   </section>
 
-  <p id="usage" class="msg"></p>
+  <div class="row wrap">
+    <p id="usage" class="msg"></p>
+    <button id="allDel" type="button" class="del">マイ画像を全部削除</button>
+  </div>
   <input id="replaceFile" type="file" accept="image/*" hidden>
 </main>
 </body>

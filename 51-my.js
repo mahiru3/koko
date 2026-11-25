@@ -9,7 +9,7 @@ import { compressImage } from "./51-session-import.js";
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const ID_RE = /^[a-z0-9][a-z0-9_-]{0,19}$/;
-const M = { db: null, uid: "", pid: "", code: "", sets: {}, files: {}, sel: "", replacing: null };
+const M = { db: null, uid: "", pid: "", code: "", sets: {}, files: {}, sel: "", replacing: null, picked: new Set() };
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
@@ -68,6 +68,13 @@ function bind() {
     }
   });
   $("setNew").addEventListener("click", newSet);
+  $("selAll").addEventListener("change", () => {
+    const st = M.sets[M.sel];
+    M.picked = new Set($("selAll").checked && st ? (st.faces || []).map((_, i) => i) : []);
+    render();
+  });
+  $("selDel").addEventListener("click", deletePicked);
+  $("allDel").addEventListener("click", deleteAll);
   $("setId").addEventListener("change", () => {
     const v = $("setId").value.trim().toLowerCase();
     if (!ID_RE.test(v)) { $("setMsg").textContent = "IDは半角英数字（と - _）で20文字までです"; render(); return; }
@@ -169,6 +176,33 @@ async function deleteSet() {
   render();
 }
 
+async function deletePicked() {
+  const st = M.sets[M.sel];
+  if (!st || !M.picked.size) return;
+  if (!confirm("選んだ " + M.picked.size + "枚 の画像を削除しますか？")) return;
+  const faces = Array.isArray(st.faces) ? st.faces : [];
+  const gone = faces.filter((_, i) => M.picked.has(i));
+  const next = faces.filter((_, i) => !M.picked.has(i));
+  const upd = { ["sets/" + M.sel + "/faces"]: next };
+  gone.forEach((f) => {
+    if (!usedElsewhere(f.file, M.sel) && !next.some((x) => x.file === f.file)) upd["files/" + f.file] = null;
+  });
+  await update(lp(""), upd);
+  M.picked = new Set();
+  $("setMsg").textContent = gone.length + "枚削除しました";
+}
+
+async function deleteAll() {
+  const n = Object.keys(M.files).length;
+  const typed = prompt("マイ画像（すべてのIDと画像 " + n + "枚）を全部削除します。差分セットを使っている駒は画像が出なくなり、元に戻せません。\n削除するなら「削除」と入力してください");
+  if (typed === null) return;
+  if (typed.trim() !== "削除") { setStatus("入力が違うため削除しませんでした", true); return; }
+  await update(lp(""), { files: null, sets: null });
+  M.sel = "";
+  M.picked = new Set();
+  setStatus("マイ画像を全部削除しました");
+}
+
 function saveFaces(faces) {
   return update(lp("sets/" + M.sel), { faces });
 }
@@ -181,7 +215,7 @@ function render() {
   list.forEach(([k, s]) => {
     const b = el("button", k === M.sel ? "on" : "", s.id + "（" + (s.faces || []).length + "）");
     b.type = "button";
-    b.addEventListener("click", () => { M.sel = k; $("setMsg").textContent = ""; render(); });
+    b.addEventListener("click", () => { M.sel = k; M.picked = new Set(); $("setMsg").textContent = ""; render(); });
     tabs.append(b);
   });
   $("setEmpty").hidden = list.length > 0;
@@ -189,6 +223,10 @@ function render() {
   $("setEditor").hidden = !st;
   renderUsage();
   if (!st) return;
+  [...M.picked].forEach((i) => { if (!(st.faces || [])[i]) M.picked.delete(i); });
+  $("selDel").disabled = !M.picked.size;
+  $("selDel").textContent = M.picked.size ? "選択した画像を削除（" + M.picked.size + "枚）" : "選択した画像を削除";
+  $("selAll").checked = M.picked.size > 0 && M.picked.size === (st.faces || []).length;
   if (document.activeElement !== $("setId")) $("setId").value = st.id;
   const tb = $("rows");
   tb.replaceChildren();
@@ -235,16 +273,24 @@ function render() {
       await update(lp(""), upd);
     });
     ops.append(up, del);
+    const pick = el("input");
+    pick.type = "checkbox";
+    pick.checked = M.picked.has(i);
+    pick.addEventListener("change", () => {
+      if (pick.checked) M.picked.add(i); else M.picked.delete(i);
+      render();
+    });
+    const c0 = el("td", "pick"); c0.append(pick);
     const c1 = el("td"); c1.append(lab);
     const c2 = el("td"); c2.append(name);
     const c3 = el("td"); c3.append(pv);
-    tr.append(c1, c2, c3, ops);
+    tr.append(c0, c1, c2, c3, ops);
     tb.append(tr);
   });
   if (!faces.length) {
     const tr = el("tr");
     const td = el("td", "msg", "まだ画像がありません");
-    td.colSpan = 4;
+    td.colSpan = 5;
     tr.append(td);
     tb.append(tr);
   }
@@ -257,4 +303,5 @@ function renderUsage() {
   $("usage").textContent = "画像 " + n + "枚・約" + (total / 1024 / 1024).toFixed(1) + "MB";
 }
 
+document.body.classList.add("booted");
 start().catch((e) => setStatus("接続に失敗しました: " + e.message, true));

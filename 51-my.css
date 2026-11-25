@@ -188,3 +188,8 @@ details.my-box > summary {
     font-size: 16px;
   }
 }
+
+.faces-table td.pick {
+  width: 28px;
+  text-align: center;
+}

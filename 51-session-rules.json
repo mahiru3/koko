@@ -1,8 +1,10 @@
 {
+  // koko rules v4a 2026-11-25
   "rules": {
     "rooms": {
       "$room": {
         ".read": "auth != null && $room.matches(/^[a-z0-9-]{4,40}$/)",
+        ".write": "auth != null && !newData.exists() && data.child('meta/owner').exists() && data.child('meta/owner').val() === root.child('links/' + auth.uid + '/pid').val()",
         "meta": {
           ".write": "auth != null"
         },

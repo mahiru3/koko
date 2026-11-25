@@ -2,10 +2,10 @@ import { firebaseConfig } from "./51-session-config.js";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, onChildAdded,
-  query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
+  onChildRemoved, query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
 } from "./51-session-fb.js";
 import { parseTekeyJson, renderPalette, expandVars } from "./51-session-palette.js";
-import { readRoomZip, compressImage, assetKey, parseCharJson } from "./51-session-import.js";
+import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js";
 import { ensureProfile } from "./51-session-id.js";
 
 const $ = (id) => document.getElementById(id);
@@ -22,14 +22,37 @@ const S = {
   assets: new Map(), nodes: new Map(),
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
   speaker: "", selChar: "", palettes: [], palSel: "",
-  pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false
+  pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false,
+  isKP: false, off: { x: 0, y: 0 }, created: "", metaSeen: false
 };
+
+function kpCheck() {
+  const m = S.meta || {};
+  return !!S.pid && (m.owner === S.pid || !!(m.kps && m.kps[S.pid]));
+}
+
+function visibleChar(c) {
+  return !!c && (!c.kpOnly || S.isKP);
+}
+
+function isStand(c) {
+  return !!c && c.kind === "stand";
+}
+
+function canSeeStatus(c) {
+  return !!c && (!c.hideStatus || S.isKP || c.owner === S.pid);
+}
 
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text !== undefined) e.textContent = text;
   return e;
+}
+
+function blurInput() {
+  const a = document.activeElement;
+  if (a && a !== document.body && a.matches("input, textarea, select")) a.blur();
 }
 
 function setStatus(text, bad) {
@@ -87,8 +110,10 @@ function faceList(c) {
 function charIcon(c) {
   if (!c) return "";
   const fl = faceList(c);
+  const parent = isStand(c) && c.parent ? S.chars[c.parent] : null;
+  const face = parent ? parent.face : c.face;
   if (fl.length) {
-    const f = fl.find((x) => x.label && x.label === c.face) || (c.set ? fl[0] : null);
+    const f = fl.find((x) => x.label && x.label === face) || (c.set || parent ? fl[0] : null);
     if (f && f.key) return f.key;
   }
   return c.icon || "";
@@ -116,7 +141,7 @@ function initJoin() {
   $("joinRoom").value = params.get("room") || "";
   $("joinName").value = localStorage.getItem("s51-name") || "";
   $("joinColor").value = localStorage.getItem("s51-color") || "#4a90d9";
-  $("newRoom").addEventListener("click", () => { $("joinRoom").value = randomId(10); });
+  $("newRoom").addEventListener("click", () => { $("joinRoom").value = randomId(10); S.created = $("joinRoom").value; });
   $("joinBtn").addEventListener("click", join);
   $("joinName").addEventListener("keydown", (e) => { if (e.key === "Enter") join(); });
   if (!(firebaseConfig.apiKey && firebaseConfig.databaseURL) && !params.has("emu")) {
@@ -168,6 +193,7 @@ async function connect() {
 
 async function startRoom() {
   initTabs();
+  initPaste();
   await initSystems();
   initPresence();
   initChat();
@@ -180,8 +206,16 @@ async function startRoom() {
     catch (e) { prompt("このURLを共有してください", location.href); }
   });
   onChildAdded(rp("assets"), (s) => { S.assets.set(s.key, s.val()); queueRender(); updateAssetInfo(); });
+  onChildRemoved(rp("assets"), (s) => { S.assets.delete(s.key); queueRender(); updateAssetInfo(); });
   onValue(rp("meta"), (s) => {
-    S.meta = s.val() || {};
+    const raw = s.val();
+    if (!raw && S.metaSeen) setStatus("この部屋は削除されたか、空になりました", true);
+    if (raw) S.metaSeen = true;
+    S.meta = raw || {};
+    if (!S.meta.owner && S.created && S.created === S.roomId) { S.created = ""; set(rp("meta/owner"), S.pid); }
+    const kp = kpCheck();
+    if (kp !== S.isKP) { S.isKP = kp; renderCharList(); renderSpeaker(); renderCharDetail(); }
+    renderRoomAdmin();
     S.vars = S.meta.vars || {};
     const b = S.meta.board || {};
     const sig = [b.fieldW, b.fieldH, b.fg, S.meta.fieldMult].join("|");
@@ -260,7 +294,7 @@ function speakerChar() {
 }
 
 function charByName(name) {
-  const hit = Object.entries(S.chars).find(([, c]) => c.name === name);
+  const hit = Object.entries(S.chars).find(([, c]) => c.name === name && !isStand(c));
   return hit ? hit[0] : "";
 }
 
@@ -318,7 +352,7 @@ function renderSpeaker() {
   };
   mk("", S.name, "", S.color);
   sorted(S.chars, "order")
-    .filter(([id, c]) => S.showAllChars || c.owner === S.pid || id === S.speaker)
+    .filter(([id, c]) => !isStand(c) && visibleChar(c) && (S.showAllChars || c.owner === S.pid || id === S.speaker))
     .forEach(([id, c]) => mk(id, c.name || "（名前なし）", charIcon(c), c.color));
   const t = el("button", "cb-toggle", S.showAllChars ? "自分のだけ" : "全キャラ");
   t.type = "button";
@@ -360,9 +394,10 @@ async function statusCommand(line, charId) {
   const v = evalNumber(m[3] || "0");
   if (Number.isNaN(v.n)) return { error: "値を計算できませんでした: " + m[3] };
   const st = (c.status || []).map((s) => ({ ...s }));
-  let idx = st.findIndex((s) => s.label === label);
+  const key = normLabel(label);
+  let idx = st.findIndex((s) => normLabel(s.label) === key);
   const pr = (c.params || []).map((p) => ({ ...p }));
-  const pidx = pr.findIndex((p) => p.label === label);
+  const pidx = pr.findIndex((p) => normLabel(p.label) === key);
   let before;
   let after;
   if (idx < 0 && pidx >= 0) {
@@ -377,7 +412,8 @@ async function statusCommand(line, charId) {
     st[idx].value = after;
     await update(rp("chars/" + charId), { status: st });
   }
-  return { text: "[ " + (c.name || "") + " ] " + label + " : " + before + " → " + after + (v.detail ? "（" + v.detail + "）" : "") };
+  const shown = idx >= 0 ? st[idx].label : pidx >= 0 ? pr[pidx].label : label;
+  return { text: "[ " + (c.name || "") + " ] " + shown + " : " + before + " → " + after + (v.detail ? "（" + v.detail + "）" : "") };
 }
 
 function rollDice(text) {
@@ -521,22 +557,52 @@ function fieldRect() {
 }
 
 function initBoard() {
+  const wrap = $("boardWrap");
   $("zoomIn").addEventListener("click", () => setZoom(S.zoom * 1.25));
   $("zoomOut").addEventListener("click", () => setZoom(S.zoom / 1.25));
   $("zoomFit").addEventListener("click", fitField);
   window.addEventListener("resize", () => { if (!S.drag) queueRender(); });
+  wrap.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const r = wrap.getBoundingClientRect();
+    const step = Math.max(-3, Math.min(3, -e.deltaY / (e.deltaMode === 1 ? 3 : 100)));
+    setZoom(S.zoom * Math.pow(1.15, step), { x: e.clientX - r.left, y: e.clientY - r.top });
+  }, { passive: false });
+  let pan = null;
+  wrap.addEventListener("pointerdown", (e) => {
+    if (e.pointerType === "touch" || (e.button !== 0 && e.button !== 1)) return;
+    if (e.target.closest(".obj, .popup")) return;
+    e.preventDefault();
+    blurInput();
+    pan = { id: e.pointerId, x: e.clientX, y: e.clientY, sl: wrap.scrollLeft, st: wrap.scrollTop };
+    wrap.setPointerCapture(e.pointerId);
+    wrap.classList.add("panning");
+  });
+  wrap.addEventListener("pointermove", (e) => {
+    if (!pan || pan.id !== e.pointerId) return;
+    wrap.scrollLeft = pan.sl - (e.clientX - pan.x);
+    wrap.scrollTop = pan.st - (e.clientY - pan.y);
+  });
+  const stop = (e) => {
+    if (!pan || pan.id !== e.pointerId) return;
+    pan = null;
+    wrap.classList.remove("panning");
+  };
+  wrap.addEventListener("pointerup", stop);
+  wrap.addEventListener("pointercancel", stop);
 }
 
-function setZoom(z, keepCenter) {
+function setZoom(z, at) {
   const wrap = $("boardWrap");
-  const cx = (wrap.scrollLeft + wrap.clientWidth / 2) / S.zoom;
-  const cy = (wrap.scrollTop + wrap.clientHeight / 2) / S.zoom;
-  S.zoom = Math.max(0.15, Math.min(4, z));
+  const p = at && typeof at === "object" ? at : { x: wrap.clientWidth / 2, y: wrap.clientHeight / 2 };
+  const bx = (wrap.scrollLeft + p.x - S.off.x) / S.zoom;
+  const by = (wrap.scrollTop + p.y - S.off.y) / S.zoom;
+  S.zoom = Math.max(0.1, Math.min(5, z));
   $("zoomLabel").textContent = Math.round(S.zoom * 100) + "%";
   layoutSizer();
-  if (keepCenter !== false) {
-    wrap.scrollLeft = cx * S.zoom - wrap.clientWidth / 2;
-    wrap.scrollTop = cy * S.zoom - wrap.clientHeight / 2;
+  if (at !== false) {
+    wrap.scrollLeft = bx * S.zoom + S.off.x - p.x;
+    wrap.scrollTop = by * S.zoom + S.off.y - p.y;
   }
 }
 
@@ -545,15 +611,23 @@ function fitField() {
   const f = fieldRect();
   const z = Math.min(wrap.clientWidth / ((f.w + 2) * UNIT), wrap.clientHeight / ((f.h + 2) * UNIT));
   setZoom(z, false);
-  wrap.scrollLeft = (f.x + S.origin.x + f.w / 2) * UNIT * S.zoom - wrap.clientWidth / 2;
-  wrap.scrollTop = (f.y + S.origin.y + f.h / 2) * UNIT * S.zoom - wrap.clientHeight / 2;
+  wrap.scrollLeft = (f.x + S.origin.x + f.w / 2) * UNIT * S.zoom + S.off.x - wrap.clientWidth / 2;
+  wrap.scrollTop = (f.y + S.origin.y + f.h / 2) * UNIT * S.zoom + S.off.y - wrap.clientHeight / 2;
 }
 
 function layoutSizer() {
   const board = $("board");
+  const wrap = $("boardWrap");
+  const w = parseFloat(board.style.width || 0) * S.zoom;
+  const h = parseFloat(board.style.height || 0) * S.zoom;
+  const vw = wrap.clientWidth;
+  const vh = wrap.clientHeight;
+  S.off = { x: vw, y: vh };
   board.style.transform = "scale(" + S.zoom + ")";
-  $("sizer").style.width = parseFloat(board.style.width || 0) * S.zoom + "px";
-  $("sizer").style.height = parseFloat(board.style.height || 0) * S.zoom + "px";
+  board.style.left = S.off.x + "px";
+  board.style.top = S.off.y + "px";
+  $("sizer").style.width = w + vw * 2 + "px";
+  $("sizer").style.height = h + vh * 2 + "px";
 }
 
 function queueRender() {
@@ -566,7 +640,7 @@ function boardObjects() {
   const list = [];
   Object.entries(S.items).forEach(([id, o]) => { if (o.visible !== false) list.push({ kind: "items", id, o }); });
   Object.entries(S.markers).forEach(([id, o]) => list.push({ kind: "markers", id, o }));
-  Object.entries(S.chars).forEach(([id, o]) => { if (o.active !== false) list.push({ kind: "chars", id, o }); });
+  Object.entries(S.chars).forEach(([id, o]) => { if (o.active !== false && visibleChar(o)) list.push({ kind: "chars", id, o }); });
   return list;
 }
 
@@ -629,6 +703,8 @@ function drawObject({ kind, id, o }) {
   node.style.height = (o.h || 1) * UNIT + "px";
   node.style.zIndex = String(Math.round(o.z || 0) + (kind === "chars" ? 1000 : 0));
   node.classList.toggle("locked", !!o.locked);
+  node.classList.toggle("stand", kind === "chars" && isStand(o));
+  node.classList.toggle("kp-only", kind === "chars" && !!o.kpOnly);
   node.classList.toggle("clickable", !!o.click);
   node.title = kind === "markers" ? (o.text || "") : (o.memo || "");
   const img = node.querySelector(".obj-img");
@@ -640,10 +716,10 @@ function drawObject({ kind, id, o }) {
     fb.hidden = !!s;
     fb.textContent = (o.name || "?").slice(0, 1);
     fb.style.background = o.color || "#888";
-    node.querySelector(".label").textContent = o.name || "";
+    node.querySelector(".label").textContent = isStand(o) ? "" : o.name || "";
     const bars = node.querySelector(".bars");
     bars.replaceChildren();
-    if (!o.hideStatus) {
+    if (!isStand(o) && canSeeStatus(o)) {
       (o.status || []).slice(0, 4).forEach((st) => {
         const row = el("div", "sbar");
         const fill = el("span", "bar-fill");
@@ -667,6 +743,7 @@ function bindPointer(node) {
     if (!o) return;
     e.preventDefault();
     e.stopPropagation();
+    blurInput();
     active = true;
     moved = false;
     sx = e.clientX; sy = e.clientY;
@@ -804,6 +881,10 @@ function initChars() {
   field("cdColor", "color");
   field("cdActive", "active", (e) => e.checked);
   field("cdHide", "hideStatus", (e) => e.checked);
+  field("cdLock", "locked", (e) => e.checked);
+  field("cdKpOnly", "kpOnly", (e) => e.checked);
+  $("dupType").addEventListener("change", () => { $("dupSize").value = $("dupType").value === "stand" ? "16" : "4"; });
+  $("dupBtn").addEventListener("click", duplicateChar);
   field("cdMemo", "memo");
   field("cdCommands", "commands");
   $("cdAddStatus").addEventListener("click", () => {
@@ -826,13 +907,46 @@ async function uploadAsset(file, max) {
   return key;
 }
 
+function centerPos(w, h, i) {
+  return { x: Math.round(-w / 2) + (i || 0) * 2, y: Math.round(-h / 2) + (i || 0) * 2 };
+}
+
+function bottomZ() {
+  return Object.values(S.chars).reduce((m, c) => Math.min(m, +c.z || 0), 100) - 1;
+}
+
+function topZ() {
+  return Object.values(S.chars).reduce((m, c) => Math.max(m, +c.z || 0), 100) + 1;
+}
+
+async function duplicateChar() {
+  const src0 = S.chars[S.selChar];
+  if (!src0) return;
+  const kind = $("dupType").value;
+  const n = Math.max(1, Math.min(64, parseInt($("dupSize").value, 10) || 4));
+  const parentId = isStand(src0) ? src0.parent : S.selChar;
+  const base = {
+    name: kind === "stand" ? (src0.name || "").slice(0, 60) : (src0.name || "").slice(0, 56) + "（複製）",
+    color: src0.color || "#888888", icon: src0.icon || "", faces: src0.faces || [], set: src0.set || null, face: src0.face || null,
+    ...centerPos(n, n), z: kind === "stand" ? bottomZ() : topZ(), w: n, h: n, owner: S.pid, active: true, order: Date.now(),
+    kpOnly: !!src0.kpOnly, locked: false, hideStatus: !!src0.hideStatus
+  };
+  const c = kind === "stand"
+    ? { ...base, kind: "stand", parent: parentId, status: [], params: [], commands: "", memo: "" }
+    : { ...base, kind: "char", status: src0.status || [], params: src0.params || [], commands: src0.commands || "", memo: src0.memo || "" };
+  const r = await push(rp("chars"), c);
+  S.selChar = r.key;
+  renderCharList();
+  renderCharDetail();
+  $("dupMsg").textContent = (kind === "stand" ? "立ち絵駒" : "キャラ駒") + "を作りました（盤面の中央）";
+}
+
 async function addChar() {
   const name = $("pieceName").value.trim() || "キャラ";
-  const f = fieldRect();
   const c = {
     name: name.slice(0, 60), color: $("pieceColor").value,
-    x: Math.round(f.x + 2 + Math.random() * 4), y: Math.round(f.y + 2 + Math.random() * 4), z: 100,
-    w: 4, h: 4, owner: S.pid, status: [{ label: "HP", value: 10, max: 10 }, { label: "MP", value: 10, max: 10 }, { label: "SAN", value: 50, max: 99 }],
+    ...centerPos(4, 4), z: topZ(),
+    w: 4, h: 4, kind: "char", owner: S.pid, status: [{ label: "HP", value: 10, max: 10 }, { label: "MP", value: 10, max: 10 }, { label: "SAN", value: 50, max: 99 }],
     params: [], commands: "", memo: "", active: true, order: Date.now()
   };
   try {
@@ -853,17 +967,85 @@ async function addChar() {
   }
 }
 
-async function importChars(text) {
+async function fetchImage(url) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 15000);
+  try {
+    const res = await fetch(url, { signal: ctl.signal, mode: "cors" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    if (!/^image\//.test(blob.type)) throw new Error("画像ではありません");
+    return await compressImage(await blob.arrayBuffer(), blob.type, 1024);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function newSetId() {
+  const used = new Set(Object.values(S.mySets || {}).map((x) => x.id));
+  for (let i = 0; i < 50; i++) {
+    const id = randomId(3).replace(/[^a-z]/g, "x");
+    if (!used.has(id)) return id;
+  }
+  return randomId(5);
+}
+
+async function importImages(c, say) {
+  const list = [];
+  if (c.iconUrl) list.push({ label: "@通常", url: c.iconUrl });
+  (c.faceUrls || []).forEach((f) => { if (!list.some((x) => x.label === f.label)) list.push(f); });
+  if (!list.length) return {};
+  const faces = [];
+  let failed = 0;
+  for (let i = 0; i < list.length; i++) {
+    say(c.name + " の画像を取り込み中 " + (i + 1) + "/" + list.length);
+    try {
+      const data = await fetchImage(list[i].url);
+      const r = await push(ref(S.db, "lib/" + S.pid + "/files"), { name: (c.name + "-" + list[i].label.slice(1)).slice(0, 80) + ".webp", data, t: serverTimestamp() });
+      faces.push({ label: list[i].label, file: r.key });
+    } catch (e) {
+      failed++;
+    }
+  }
+  if (failed === 0) {
+    const id = newSetId();
+    const r = await push(ref(S.db, "lib/" + S.pid + "/sets"), { id, faces, order: Date.now() });
+    S.mySets[r.key] = { id, faces };
+    return { set: { pid: S.pid, sid: r.key }, saved: "マイ画像に保存（ID: " + id + "）" };
+  }
+  if (faces.length) {
+    const up = {};
+    faces.forEach((f) => { up["lib/" + S.pid + "/files/" + f.file] = null; });
+    await update(ref(S.db), up);
+  }
+  return {
+    icon: c.iconUrl || "",
+    faces: list.filter((f) => f.label !== "@通常").map((f) => ({ label: f.label, icon: f.url })),
+    saved: "画像はココフォリアのURLをそのまま使います（ココフォリア側で消すと表示されません）"
+  };
+}
+
+async function importChars(text, say) {
   const msg = $("charImportMsg");
-  if (!text.trim()) { msg.textContent = "貼り付けるか、ファイルを選んでください"; return; }
+  const tell = say || ((t) => { msg.textContent = t; });
+  if (!text.trim()) { tell("貼り付けるか、ファイルを選んでください"); return false; }
   let list;
   try { list = parseCharJson(text); }
-  catch (e) { msg.textContent = "読み込めませんでした（JSONの形ではないようです）"; return; }
-  if (!list.length) { msg.textContent = "キャラのデータが見つかりませんでした"; return; }
-  const f = fieldRect();
+  catch (e) { tell("読み込めませんでした（JSONの形ではないようです）"); return false; }
+  if (!list.length) { tell("キャラのデータが見つかりませんでした"); return false; }
   let last = "";
+  const notes = [];
   for (let i = 0; i < list.length; i++) {
-    const c = { ...list[i], x: Math.round(f.x + 2 + i * 5), y: Math.round(f.y + 2), z: 100, active: true, hideStatus: false, owner: S.pid, order: Date.now() + i };
+    const { iconUrl, faceUrls, ...base } = list[i];
+    const img = await importImages(list[i], tell);
+    if (img.saved) notes.push(img.saved);
+    const c = {
+      ...base, ...centerPos(base.w, base.h, i), z: topZ() + i, kind: "char",
+      active: true, hideStatus: false, owner: S.pid, order: Date.now() + i
+    };
+    if (img.set) c.set = img.set;
+    if (img.icon) c.icon = img.icon;
+    if (img.faces && img.faces.length) c.faces = img.faces;
     last = (await push(rp("chars"), c)).key;
   }
   S.selChar = last;
@@ -871,29 +1053,59 @@ async function importChars(text) {
   renderCharList();
   renderCharDetail();
   $("charJson").value = "";
-  msg.textContent = list.map((c) => c.name).join("、") + " を取り込みました";
+  tell(list.map((c) => c.name).join("、") + " を盤面の中央に取り込みました" + (notes.length ? "。" + [...new Set(notes)].join("。") : ""));
+  return true;
+}
+
+function initPaste() {
+  document.addEventListener("paste", (e) => {
+    const t = e.target;
+    if (t && (t.closest("input, textarea, select, [contenteditable]"))) return;
+    const text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+    if (!/^\s*[\[{]/.test(text || "")) return;
+    e.preventDefault();
+    importChars(text, (m) => setStatus(m)).catch((err) => setStatus("取り込みに失敗しました: " + err.message, true));
+  });
 }
 
 function renderCharList() {
   const list = $("charList");
   list.replaceChildren();
-  sorted(S.chars, "order").forEach(([id, c]) => {
+  sorted(S.chars, "order").filter(([, c]) => visibleChar(c)).forEach(([id, c]) => {
     const li = el("li", id === S.selChar ? "current" : "");
     const th = el("img", "thumb round");
     th.alt = "";
     th.dataset.asset = charIcon(c);
     th.src = src(th.dataset.asset);
-    const name = el("span", "", (c.name || "（名前なし）") + (c.owner === S.pid ? "（自分）" : "") + (c.active === false ? "（盤外）" : ""));
-    li.append(th, name);
+    const tags = (isStand(c) ? "（立ち絵）" : "") + (c.owner === S.pid ? "（自分）" : "") + (c.kpOnly ? "（KPのみ）" : "") + (c.locked ? "（固定）" : "");
+    const name = el("span", "", (c.name || "（名前なし）") + tags);
+    const off = c.active === false;
+    const tg = el("button", "mini" + (off ? " primary" : ""), off ? "戻す" : "下げる");
+    tg.type = "button";
+    tg.title = off ? "盤面に戻す" : "盤面から下げる";
+    tg.addEventListener("click", (e) => { e.stopPropagation(); update(rp("chars/" + id), { active: off }); });
+    li.classList.toggle("off", off);
+    li.append(th, name, tg);
     li.addEventListener("click", () => { S.selChar = id; renderCharList(); renderCharDetail(); });
     list.append(li);
   });
 }
 
 function renderCharDetail() {
-  const c = S.chars[S.selChar];
+  const c = visibleChar(S.chars[S.selChar]) ? S.chars[S.selChar] : null;
   $("charDetail").hidden = !c;
   if (!c) return;
+  const stand = isStand(c);
+  const seeSt = canSeeStatus(c);
+  document.querySelectorAll("#charDetail .char-only").forEach((n) => { n.hidden = stand; });
+  document.querySelectorAll("#charDetail .kp-only-ui").forEach((n) => { n.hidden = !S.isKP; });
+  $("cdStatusBox").hidden = stand || !seeSt;
+  $("cdHiddenNote").hidden = stand || seeSt;
+  const parent = stand && c.parent ? S.chars[c.parent] : null;
+  $("cdParent").hidden = !stand;
+  $("cdParent").textContent = parent ? "「" + (parent.name || "") + "」の発言で表情が切り替わります" : "元のキャラ駒が見つかりません（表情は切り替わりません）";
+  $("cdLock").checked = !!c.locked;
+  $("cdKpOnly").checked = !!c.kpOnly;
   const keep = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v; };
   keep("cdName", c.name || "");
   keep("cdColor", c.color || "#888888");
@@ -923,8 +1135,10 @@ function renderCharDetail() {
 
   const faces = $("cdFaces");
   faces.replaceChildren();
+  const faceOwner = parent ? c.parent : S.selChar;
+  const curFace = parent ? parent.face : c.face;
   faceList(c).forEach((fc) => {
-    const b = el("button", "face-btn" + (fc.label && fc.label === c.face ? " on" : ""));
+    const b = el("button", "face-btn" + (fc.label && fc.label === curFace ? " on" : ""));
     b.type = "button";
     b.title = (fc.label || "") + "（クリックでこの表情にする）";
     const im = el("img");
@@ -932,7 +1146,7 @@ function renderCharDetail() {
     im.dataset.asset = fc.key || "";
     im.src = src(fc.key);
     b.append(im, el("span", "", fc.label || "-"));
-    b.addEventListener("click", () => update(rp("chars/" + S.selChar), { face: fc.label || null }));
+    b.addEventListener("click", () => update(rp("chars/" + faceOwner), { face: fc.label || null }));
     faces.append(b);
   });
 
@@ -1092,6 +1306,52 @@ function initRoomTab() {
   });
   img("bgFile", "bg");
   img("fgFile", "fg");
+  $("kpClaim").addEventListener("click", async () => {
+    if (S.meta.owner) return;
+    if (!confirm("この部屋のKPになりますか？（あとから変更はできません）")) return;
+    await set(rp("meta/owner"), S.pid);
+    await postSystem(S.name + " がこの部屋のKPになりました");
+  });
+  $("assetsDelAll").addEventListener("click", deleteRoomAssets);
+  $("roomDelete").addEventListener("click", deleteRoom);
+}
+
+function renderRoomAdmin() {
+  const hasOwner = !!S.meta.owner;
+  $("kpClaimBox").hidden = hasOwner;
+  $("kpAdmin").hidden = !S.isKP;
+  $("kpBadge").hidden = !S.isKP;
+}
+
+async function deleteRoomAssets() {
+  if (!S.isKP) return;
+  const keys = [...S.assets.keys()];
+  if (!keys.length) { $("adminMsg").textContent = "部屋の画像はありません"; return; }
+  if (!confirm("この部屋の画像 " + keys.length + "枚 を全部削除しますか？\n（room.zipの背景・パネル・駒の画像が表示されなくなります。マイ画像は消えません）")) return;
+  const up = {};
+  keys.forEach((k) => { up["assets/" + k] = null; });
+  try {
+    await update(rp(""), up);
+    $("adminMsg").textContent = keys.length + "枚の画像を削除しました";
+    await postSystem(S.name + " が部屋の画像を全部削除しました");
+  } catch (e) {
+    $("adminMsg").textContent = "削除に失敗しました: " + e.message;
+  }
+}
+
+async function deleteRoom() {
+  if (!S.isKP) return;
+  const typed = prompt("部屋そのものを削除します。チャットのログ・駒・画像・シーンがすべて消え、元に戻せません。\n削除するなら部屋ID「" + S.roomId + "」を入力してください");
+  if (typed === null) return;
+  if (typed.trim() !== S.roomId) { $("adminMsg").textContent = "部屋IDが違うため削除しませんでした"; return; }
+  try {
+    await remove(rp(""));
+    localStorage.removeItem("s51-pal-" + S.roomId);
+    localStorage.removeItem("s51-speaker-" + S.roomId);
+    location.href = location.pathname;
+  } catch (e) {
+    $("adminMsg").textContent = "削除に失敗しました（ルールが古い可能性があります）: " + e.message;
+  }
 }
 
 function updateAssetInfo() {
@@ -1145,4 +1405,5 @@ async function importZip(e) {
   }
 }
 
+document.body.classList.add("booted");
 initJoin();

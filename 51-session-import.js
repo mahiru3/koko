@@ -99,7 +99,7 @@ export async function readRoomZip(file, onProgress) {
       name: String(c.name || "").slice(0, 60),
       color: c.color || "#888888",
       icon: ref(c.iconUrl),
-      faces: (c.faces || []).map((f) => ({ label: f.label || "", icon: ref(f.iconUrl) })),
+      faces: (c.faces || []).map((f) => ({ label: faceLabel(f.label), icon: ref(f.iconUrl) })),
       x: +c.x || 0, y: +c.y || 0, z: +c.z || 100,
       w: +c.width || 1, h: +c.height || 1,
       status: (c.status || []).map((s) => ({ label: String(s.label || ""), value: +s.value || 0, max: +s.max || 0 })),
@@ -166,6 +166,16 @@ function looseParse(text) {
   }
 }
 
+export function faceLabel(v) {
+  const s = String(v || "").trim();
+  if (!s) return "";
+  return (s.startsWith("@") ? s : "@" + s).slice(0, 31);
+}
+
+export function normLabel(v) {
+  return String(v || "").normalize("NFKC").toUpperCase();
+}
+
 export function parseCharJson(text) {
   const raw = looseParse(text);
   const list = Array.isArray(raw) ? raw : [raw];
@@ -191,9 +201,15 @@ export function parseCharJson(text) {
           have.add(label);
         }
       });
+      const url = (u) => (typeof u === "string" && /^https:\/\//.test(u) ? u : "");
+      const faceUrls = (Array.isArray(d.faces) ? d.faces : [])
+        .map((f) => ({ label: faceLabel(f && f.label), url: url(f && f.iconUrl) }))
+        .filter((f) => f.label && f.url);
       return {
         name: String(d.name || "名前なし").slice(0, 60),
         color: /^#[0-9a-f]{3,8}$/i.test(d.color || "") ? d.color : "#888888",
+        iconUrl: url(d.iconUrl),
+        faceUrls,
         commands,
         status,
         params,

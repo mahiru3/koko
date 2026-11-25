@@ -3,15 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>TRPGセッション テスト</title>
+<title>koko</title>
 <link rel="stylesheet" href="51-session.css">
 <script src="51-session-bcdice.js"></script>
 <script src="51-session-jszip.js"></script>
 <script type="module" src="51-session.js"></script>
 </head>
 <body>
+<p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
 <section id="join" class="join">
-  <h1>TRPGセッション テスト</h1>
+  <h1>koko</h1>
   <label class="field">部屋ID
     <span class="row"><input id="joinRoom" autocomplete="off" spellcheck="false" placeholder="招待URLなら自動入力"><button id="newRoom" type="button">新規作成</button></span>
   </label>
@@ -24,6 +25,7 @@
 <main id="room" class="room" hidden>
   <header class="bar">
     <span id="roomLabel" class="room-label"></span>
+    <span id="kpBadge" class="kp-badge" hidden>KP</span>
     <select id="systemSel" title="ダイスシステム"></select>
     <button id="copyUrl" type="button">招待URL</button>
     <a class="btn-link" href="my.html" target="_blank" rel="noopener">マイ画像</a>
@@ -38,7 +40,7 @@
   </header>
 
   <section id="boardWrap" class="board-wrap">
-    <div id="sizer" class="sizer">
+    <div id="sizer" class="sizer" title="ホイールで拡大縮小・何もない所をドラッグで移動・Ctrl+Vで駒を貼り付け">
       <div id="board" class="board">
         <div id="field" class="field-rect"></div>
       </div>
@@ -84,6 +86,7 @@
     <div id="tab-chars" class="panel" hidden>
       <details class="acc-color-1" open>
         <summary>キャラを取り込む（いあきゃら／ココフォリア駒コピー）</summary>
+        <p class="msg">盤面をクリックしてから Ctrl+V でも取り込めます（ココフォリアと同じ）</p>
         <textarea id="charJson" rows="3" spellcheck="false" placeholder="いあきゃらの出力や、ココフォリアの駒コピーを貼り付け"></textarea>
         <div class="row">
           <label class="file-btn">JSONファイル<input id="charJsonFile" type="file" accept=".json,.txt,application/json,text/plain" multiple></label>
@@ -108,18 +111,41 @@
           <input id="cdColor" type="color">
         </div>
         <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
+        <p id="cdParent" class="msg" hidden></p>
         <label class="field">駒の大きさ<input id="cdSize" type="number" min="1" max="64" inputmode="numeric"></label>
-        <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
-        <label class="check"><input id="cdHide" type="checkbox">ステータスを隠す</label>
+        <div class="checks">
+          <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
+          <label class="check"><input id="cdLock" type="checkbox">駒を固定（動かせなくする）</label>
+          <label class="check char-only"><input id="cdHide" type="checkbox">ステータスを隠す（持ち主とKPだけに見える）</label>
+          <label class="check kp-only-ui"><input id="cdKpOnly" type="checkbox">KPだけに見える駒にする</label>
+        </div>
         <div id="cdFaces" class="faces"></div>
-        <table class="st"><tbody id="cdStatus"></tbody></table>
-        <button id="cdAddStatus" type="button">ステータス追加</button>
-        <table class="st"><tbody id="cdParams"></tbody></table>
-        <button id="cdAddParam" type="button">パラメータ追加</button>
+        <p id="cdHiddenNote" class="msg" hidden>この駒のステータスは隠されています</p>
+        <div id="cdStatusBox" class="char-only">
+          <table class="st"><tbody id="cdStatus"></tbody></table>
+          <button id="cdAddStatus" type="button">ステータス追加</button>
+          <table class="st"><tbody id="cdParams"></tbody></table>
+          <button id="cdAddParam" type="button">パラメータ追加</button>
+        </div>
         <label class="field">メモ<textarea id="cdMemo" rows="3"></textarea></label>
-        <label class="field">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
+        <label class="field char-only">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
+        <div class="dup">
+          <span>複製</span>
+          <select id="dupType">
+            <option value="char">キャラ駒</option>
+            <option value="stand">立ち絵駒（表情だけ連動）</option>
+          </select>
+          <select id="dupSize">
+            <option value="4">大きさ4（バストアップ）</option>
+            <option value="16">大きさ16（全身）</option>
+            <option value="8">大きさ8</option>
+            <option value="24">大きさ24</option>
+          </select>
+          <button id="dupBtn" type="button">複製する</button>
+        </div>
+        <p id="dupMsg" class="msg"></p>
         <div class="row">
-          <button id="cdSpeak" type="button" class="primary">このキャラで発言</button>
+          <button id="cdSpeak" type="button" class="primary char-only">このキャラで発言</button>
           <button id="cdDelete" type="button" class="del">削除</button>
         </div>
       </div>
@@ -134,6 +160,19 @@
     </div>
 
     <div id="tab-room" class="panel" hidden>
+      <details id="kpClaimBox" class="acc-color-1" open hidden>
+        <summary>この部屋にはまだKPがいません</summary>
+        <p class="msg">v4より前に作った部屋です。KPの人が押してください。</p>
+        <button id="kpClaim" type="button" class="primary">この部屋のKPになる</button>
+      </details>
+      <details id="kpAdmin" class="acc-color-4" hidden>
+        <summary>部屋の管理（KPだけに表示）</summary>
+        <div class="row wrap">
+          <button id="assetsDelAll" type="button" class="del">部屋の画像を全部削除</button>
+          <button id="roomDelete" type="button" class="del">部屋そのものを削除</button>
+        </div>
+        <p id="adminMsg" class="msg"></p>
+      </details>
       <details class="acc-color-3" open>
         <summary>ココフォリアの room.zip を読み込む</summary>
         <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
