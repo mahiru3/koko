@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>koko</title>
-<link rel="stylesheet" href="51-session.css?v=4c">
-<script src="51-session-bcdice.js?v=4c"></script>
-<script src="51-session-jszip.js?v=4c"></script>
-<script type="module" src="51-session.js?v=4c"></script>
+<link rel="stylesheet" href="51-session.css?v=4d">
+<script src="51-session-bcdice.js?v=4d"></script>
+<script src="51-session-jszip.js?v=4d"></script>
+<script type="module" src="51-session.js?v=4d"></script>
 </head>
 <body>
 <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -41,7 +41,7 @@
     <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
     <button id="themeBtn" type="button" class="theme-btn">ライト</button>
     <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-    <span class="ver">v4c</span>
+    <span class="ver">v4d</span>
   </header>
 
   <section id="boardWrap" class="board-wrap">
@@ -52,6 +52,17 @@
     </div>
   </section>
   <div id="popups" class="popups"></div>
+  <section id="chatDock" class="chat-dock">
+    <div id="chatSplit" class="chat-split" title="ドラッグで高さを変える"></div>
+    <div class="chat-dock-bar">
+      <span class="msg">見出しドラッグで並べ替え（メインは固定）・境目ドラッグで高さ変更</span>
+      <span class="row">
+        <button id="chanAdd" type="button" class="mini" hidden>＋ タブを追加</button>
+        <label class="check"><input id="popToggle" type="checkbox">新着ポップアップを出す</label>
+      </span>
+    </div>
+    <div id="chatCols" class="chat-cols"></div>
+  </section>
 
   <aside id="kpSide" class="side kp-side" hidden>
     <nav class="tabs">
@@ -140,11 +151,7 @@
     </nav>
 
     <div id="tab-chat" class="panel">
-      <nav id="chatTabs" class="chat-tabs">
-        <button type="button" data-ch="main" class="on">メイン</button>
-        <button type="button" data-ch="info">情報</button>
-        <button type="button" data-ch="talk">雑談</button>
-      </nav>
+      <nav id="chatTabs" class="chat-tabs"></nav>
       <ol id="log" class="log"></ol>
       <div id="charBar" class="char-bar"></div>
       <div id="myStatus" class="my-status" hidden></div>
@@ -163,7 +170,7 @@
       </details>
       <label class="pal-place">発言場所
         <select id="palPlace">
-          <option value="">未指定（チャットで選んでいるタブ）</option>
+          <option value="">未指定（最後に書き込んだ列）</option>
           <option value="main">メイン</option>
           <option value="info">情報</option>
           <option value="talk">雑談</option>
