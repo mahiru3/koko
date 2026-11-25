@@ -1,5 +1,5 @@
 {
-  // koko rules v4a 2026-11-25
+  // koko rules v4a-2 2026-11-25
   "rules": {
     "rooms": {
       "$room": {
@@ -28,6 +28,16 @@
         },
         "notes": {
           ".write": "auth != null"
+        },
+        "players": {
+          "$pid": {
+            ".write": "auth != null"
+          }
+        },
+        "kick": {
+          "$pid": {
+            ".write": "auth != null"
+          }
         },
         "members": {
           "$uid": {

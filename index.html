@@ -112,7 +112,11 @@
         </div>
         <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
         <p id="cdParent" class="msg" hidden></p>
-        <label class="field">駒の大きさ<input id="cdSize" type="number" min="1" max="64" inputmode="numeric"></label>
+        <label class="field kp-only-ui">持ち主（KPだけ変更できる）<select id="cdOwner"></select></label>
+        <div class="row">
+          <label class="field grow">駒の大きさ<input id="cdSize" type="number" min="1" max="64" inputmode="numeric"></label>
+          <label class="field grow">レイヤー（100〜200、大きいほど上）<input id="cdLayer" type="number" min="100" max="200" inputmode="numeric"></label>
+        </div>
         <div class="checks">
           <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
           <label class="check"><input id="cdLock" type="checkbox">駒を固定（動かせなくする）</label>
@@ -197,7 +201,7 @@
         <ul id="varList" class="mlist"></ul>
       </details>
       <details class="acc-color-2" open>
-        <summary>参加者</summary>
+        <summary>参加者（PL）</summary>
         <ul id="memberList" class="mlist"></ul>
       </details>
       <p id="assetInfo" class="msg"></p>

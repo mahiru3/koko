@@ -14,6 +14,8 @@ const ROOM_RE = /^[a-z0-9-]{4,40}$/;
 const LOG_LIMIT = 300;
 const UNIT = 24;
 const PAD = 6;
+const CHAR_Z = 100;
+const FG_Z = 1;
 
 const S = {
   db: null, uid: null, roomId: "", name: "", color: "#4a90d9",
@@ -23,7 +25,7 @@ const S = {
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
   speaker: "", selChar: "", palettes: [], palSel: "",
   pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false,
-  isKP: false, off: { x: 0, y: 0 }, created: "", metaSeen: false
+  isKP: false, off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {}
 };
 
 function kpCheck() {
@@ -139,6 +141,7 @@ function sorted(obj, by) {
 
 function initJoin() {
   $("joinRoom").value = params.get("room") || "";
+  if (params.has("kicked")) $("joinMsg").textContent = "KPにこの部屋から外されました。もう一度入室できます。";
   $("joinName").value = localStorage.getItem("s51-name") || "";
   $("joinColor").value = localStorage.getItem("s51-color") || "#4a90d9";
   $("newRoom").addEventListener("click", () => { $("joinRoom").value = randomId(10); S.created = $("joinRoom").value; });
@@ -184,6 +187,7 @@ async function connect() {
   S.pid = (await ensureProfile(S.db, S.uid)).pid;
   const url = new URL(location.href);
   url.searchParams.set("room", S.roomId);
+  url.searchParams.delete("kicked");
   history.replaceState(null, "", url);
   $("join").hidden = true;
   $("room").hidden = false;
@@ -195,7 +199,7 @@ async function startRoom() {
   initTabs();
   initPaste();
   await initSystems();
-  initPresence();
+  initPresence().catch((e) => setStatus("参加者の登録に失敗しました: " + e.message, true));
   initChat();
   initBoard();
   initChars();
@@ -215,6 +219,7 @@ async function startRoom() {
     if (!S.meta.owner && S.created && S.created === S.roomId) { S.created = ""; set(rp("meta/owner"), S.pid); }
     const kp = kpCheck();
     if (kp !== S.isKP) { S.isKP = kp; renderCharList(); renderSpeaker(); renderCharDetail(); }
+    renderPlayers();
     renderRoomAdmin();
     S.vars = S.meta.vars || {};
     const b = S.meta.board || {};
@@ -227,7 +232,7 @@ async function startRoom() {
     queueRender();
   });
   const watch = (name, after) => onValue(rp(name), (s) => { S[name] = s.val() || {}; if (after) after(); queueRender(); });
-  watch("chars", () => { renderCharList(); renderSpeaker(); renderCharDetail(); renderPaletteTabs(); });
+  watch("chars", () => { renderCharList(); renderSpeaker(); renderCharDetail(); renderPaletteTabs(); renderPlayers(); });
   onValue(ref(S.db, "lib/" + S.pid + "/sets"), (s) => { S.mySets = s.val() || {}; renderCharDetail(); });
   watch("items");
   watch("markers");
@@ -262,31 +267,89 @@ async function loadSystem(id) {
   $("systemSel").value = S.systemId;
 }
 
-function initPresence() {
+async function initPresence() {
   const mine = rp("members/" + S.uid);
+  await remove(rp("kick/" + S.pid)).catch(() => {});
+  await update(rp("players/" + S.pid), { name: S.name, color: S.color, t: serverTimestamp() });
   onValue(ref(S.db, ".info/connected"), (snap) => {
     if (snap.val() === true) {
       setStatus("接続中");
-      onDisconnect(mine).remove().then(() => set(mine, { name: S.name, color: S.color, t: serverTimestamp() }));
+      onDisconnect(mine).remove().then(() => set(mine, { name: S.name, color: S.color, pid: S.pid, t: serverTimestamp() }));
     } else {
       setStatus("切断（再接続待ち）", true);
     }
   });
-  onValue(rp("members"), (snap) => {
-    const list = $("memberList");
-    list.replaceChildren();
-    let n = 0;
-    snap.forEach((c) => {
-      n++;
-      const m = c.val() || {};
-      const li = el("li");
-      const dot = el("span", "dot");
-      dot.style.background = m.color || "#888";
-      li.append(dot, el("span", "", (m.name || "?") + (c.key === S.uid ? "（自分）" : "")));
-      list.append(li);
-    });
-    $("memberCount").textContent = n + "人";
+  onValue(rp("kick/" + S.pid), async (snap) => {
+    if (!snap.val()) return;
+    await remove(rp("kick/" + S.pid)).catch(() => {});
+    await remove(mine).catch(() => {});
+    location.href = location.pathname + "?room=" + encodeURIComponent(S.roomId) + "&kicked=1";
   });
+  onValue(rp("members"), (snap) => { S.online = snap.val() || {}; renderPlayers(); });
+  onValue(rp("players"), (snap) => { S.players = snap.val() || {}; renderPlayers(); renderCharList(); renderCharDetail(); });
+}
+
+function onlinePids() {
+  const set0 = new Set();
+  Object.values(S.online).forEach((m) => { if (m && m.pid) set0.add(m.pid); });
+  return set0;
+}
+
+function playerName(pid) {
+  const p = S.players[pid];
+  return p && p.name ? p.name : "";
+}
+
+function renderPlayers() {
+  const list = $("memberList");
+  if (!list) return;
+  list.replaceChildren();
+  const on = onlinePids();
+  const rows = Object.entries(S.players).map(([pid, p]) => ({ pid, name: p.name || "?", color: p.color, t: p.t || 0 }));
+  Object.values(S.online).forEach((m) => {
+    if (m && !m.pid && m.name) rows.push({ pid: "", name: m.name, color: m.color, t: m.t || 0 });
+  });
+  rows.sort((a, b) => a.t - b.t);
+  rows.forEach((p) => {
+    const li = el("li", "player" + (p.pid && !on.has(p.pid) ? " away" : ""));
+    const head = el("div", "player-head");
+    const dot = el("span", "dot");
+    dot.style.background = p.color || "#888";
+    const isOwner = p.pid && S.meta.owner === p.pid;
+    head.append(dot, el("span", "player-name", p.name + (isOwner ? "（KP）" : "") + (p.pid === S.pid ? "（自分）" : "")), el("span", "player-state", !p.pid || on.has(p.pid) ? "接続中" : "オフライン"));
+    if (S.isKP && p.pid && p.pid !== S.pid) {
+      const kick = el("button", "mini del", "外す");
+      kick.type = "button";
+      kick.addEventListener("click", () => removePlayer(p.pid));
+      head.append(kick);
+    }
+    li.append(head);
+    if (S.isKP && p.pid) {
+      const own = sorted(S.chars, "order").filter(([, c]) => c.owner === p.pid);
+      li.append(el("div", "player-chars", own.length ? own.map(([, c]) => (c.name || "（名前なし）") + (isStand(c) ? "（立ち絵）" : "")).join("、") : "駒なし"));
+    }
+    list.append(li);
+  });
+  if (S.isKP) {
+    const free = sorted(S.chars, "order").filter(([, c]) => !c.owner || !S.players[c.owner]);
+    if (free.length) {
+      const li = el("li", "player");
+      li.append(el("div", "player-head", "持ち主なし（KP管理）"), el("div", "player-chars", free.map(([, c]) => c.name || "（名前なし）").join("、")));
+      list.append(li);
+    }
+  }
+  $("memberCount").textContent = Object.keys(S.online).length + "人";
+}
+
+async function removePlayer(pid) {
+  if (!S.isKP) return;
+  const name = playerName(pid) || "この参加者";
+  if (!confirm(name + " を部屋から外しますか？\n・参加者一覧から消えます\n・接続中なら入室前の画面に戻ります（もう一度入室はできます）\n・その人の駒は残り、持ち主なし（KP管理）になります")) return;
+  const up = { ["players/" + pid]: null };
+  Object.entries(S.chars).forEach(([id, c]) => { if (c.owner === pid) up["chars/" + id + "/owner"] = null; });
+  if (onlinePids().has(pid)) up["kick/" + pid] = Date.now();
+  await update(rp(""), up);
+  await postSystem(name + " を部屋から外しました");
 }
 
 function speakerChar() {
@@ -665,6 +728,7 @@ function renderBoard() {
   wrap.style.backgroundImage = bg ? "url(\"" + bg + "\")" : "";
   wrap.style.backgroundColor = b.bgColor || "";
   const field = $("field");
+  field.style.zIndex = String(cssZ(FG_Z, true));
   field.style.left = (f.x + S.origin.x) * UNIT + "px";
   field.style.top = (f.y + S.origin.y) * UNIT + "px";
   field.style.width = f.w * UNIT + "px";
@@ -701,7 +765,7 @@ function drawObject({ kind, id, o }) {
   node.style.top = (o.y + S.origin.y) * UNIT + "px";
   node.style.width = (o.w || 1) * UNIT + "px";
   node.style.height = (o.h || 1) * UNIT + "px";
-  node.style.zIndex = String(Math.round(o.z || 0) + (kind === "chars" ? 1000 : 0));
+  node.style.zIndex = String(cssZ(o.z, kind === "chars" && isStand(o)));
   node.classList.toggle("locked", !!o.locked);
   node.classList.toggle("stand", kind === "chars" && isStand(o));
   node.classList.toggle("kp-only", kind === "chars" && !!o.kpOnly);
@@ -735,7 +799,8 @@ function drawObject({ kind, id, o }) {
 }
 
 function bindPointer(node) {
-  let sx = 0, sy = 0, ox = 0, oy = 0, moved = false, active = false;
+  let sx = 0, sy = 0, ox = 0, oy = 0, sl = 0, st = 0, moved = false, active = false, mode = "";
+  const wrap = $("boardWrap");
   node.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     const { kind, id } = node.dataset;
@@ -748,17 +813,28 @@ function bindPointer(node) {
     moved = false;
     sx = e.clientX; sy = e.clientY;
     ox = o.x; oy = o.y;
-    if (!o.locked) {
-      node.setPointerCapture(e.pointerId);
+    sl = wrap.scrollLeft; st = wrap.scrollTop;
+    node.setPointerCapture(e.pointerId);
+    if (o.locked) {
+      mode = e.pointerType === "touch" ? "" : "pan";
+      if (mode) wrap.classList.add("panning");
+    } else {
+      mode = "drag";
       S.drag = { kind, id };
       node.classList.add("drag");
     }
   });
   node.addEventListener("pointermove", (e) => {
-    if (!active || !S.drag || S.drag.id !== node.dataset.id) return;
+    if (!active) return;
+    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 4) moved = true;
+    if (mode === "pan") {
+      wrap.scrollLeft = sl - (e.clientX - sx);
+      wrap.scrollTop = st - (e.clientY - sy);
+      return;
+    }
+    if (mode !== "drag" || !S.drag || S.drag.id !== node.dataset.id) return;
     const dx = (e.clientX - sx) / S.zoom / UNIT;
     const dy = (e.clientY - sy) / S.zoom / UNIT;
-    if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 4) moved = true;
     node.style.left = (ox + dx + S.origin.x) * UNIT + "px";
     node.style.top = (oy + dy + S.origin.y) * UNIT + "px";
   });
@@ -767,9 +843,11 @@ function bindPointer(node) {
     active = false;
     const { kind, id } = node.dataset;
     const o = S[kind][id];
-    const wasDrag = !!S.drag;
+    const wasDrag = mode === "drag" && !!S.drag;
     S.drag = null;
+    mode = "";
     node.classList.remove("drag");
+    wrap.classList.remove("panning");
     if (wasDrag && moved && !cancel) {
       const nx = Math.round(ox + (e.clientX - sx) / S.zoom / UNIT);
       const ny = Math.round(oy + (e.clientY - sy) / S.zoom / UNIT);
@@ -882,6 +960,19 @@ function initChars() {
   field("cdActive", "active", (e) => e.checked);
   field("cdHide", "hideStatus", (e) => e.checked);
   field("cdLock", "locked", (e) => e.checked);
+  $("cdOwner").addEventListener("change", () => {
+    if (!S.selChar || !S.isKP) return;
+    const owner = $("cdOwner").value || null;
+    const up = { ["chars/" + S.selChar + "/owner"]: owner };
+    Object.entries(S.chars).forEach(([id, c]) => { if (isStand(c) && c.parent === S.selChar) up["chars/" + id + "/owner"] = owner; });
+    update(rp(""), up);
+  });
+  $("cdLayer").addEventListener("change", () => {
+    if (!S.selChar) return;
+    const n = Math.max(100, Math.min(200, parseInt($("cdLayer").value, 10) || CHAR_Z));
+    $("cdLayer").value = n;
+    update(rp("chars/" + S.selChar), { z: n });
+  });
   field("cdKpOnly", "kpOnly", (e) => e.checked);
   $("dupType").addEventListener("change", () => { $("dupSize").value = $("dupType").value === "stand" ? "16" : "4"; });
   $("dupBtn").addEventListener("click", duplicateChar);
@@ -911,12 +1002,9 @@ function centerPos(w, h, i) {
   return { x: Math.round(-w / 2) + (i || 0) * 2, y: Math.round(-h / 2) + (i || 0) * 2 };
 }
 
-function bottomZ() {
-  return Object.values(S.chars).reduce((m, c) => Math.min(m, +c.z || 0), 100) - 1;
-}
-
-function topZ() {
-  return Object.values(S.chars).reduce((m, c) => Math.max(m, +c.z || 0), 100) + 1;
+function cssZ(z, low) {
+  const n = Math.max(-100, Math.min(999, Math.round(Number.isFinite(+z) ? +z : 0)));
+  return (n + 101) * 2 + (low ? 0 : 1);
 }
 
 async function duplicateChar() {
@@ -928,7 +1016,7 @@ async function duplicateChar() {
   const base = {
     name: kind === "stand" ? (src0.name || "").slice(0, 60) : (src0.name || "").slice(0, 56) + "（複製）",
     color: src0.color || "#888888", icon: src0.icon || "", faces: src0.faces || [], set: src0.set || null, face: src0.face || null,
-    ...centerPos(n, n), z: kind === "stand" ? bottomZ() : topZ(), w: n, h: n, owner: S.pid, active: true, order: Date.now(),
+    ...centerPos(n, n), z: CHAR_Z, w: n, h: n, owner: S.pid, active: true, order: Date.now(),
     kpOnly: !!src0.kpOnly, locked: false, hideStatus: !!src0.hideStatus
   };
   const c = kind === "stand"
@@ -945,7 +1033,7 @@ async function addChar() {
   const name = $("pieceName").value.trim() || "キャラ";
   const c = {
     name: name.slice(0, 60), color: $("pieceColor").value,
-    ...centerPos(4, 4), z: topZ(),
+    ...centerPos(4, 4), z: CHAR_Z,
     w: 4, h: 4, kind: "char", owner: S.pid, status: [{ label: "HP", value: 10, max: 10 }, { label: "MP", value: 10, max: 10 }, { label: "SAN", value: 50, max: 99 }],
     params: [], commands: "", memo: "", active: true, order: Date.now()
   };
@@ -1018,11 +1106,7 @@ async function importImages(c, say) {
     faces.forEach((f) => { up["lib/" + S.pid + "/files/" + f.file] = null; });
     await update(ref(S.db), up);
   }
-  return {
-    icon: c.iconUrl || "",
-    faces: list.filter((f) => f.label !== "@通常").map((f) => ({ label: f.label, icon: f.url })),
-    saved: "画像はココフォリアのURLをそのまま使います（ココフォリア側で消すと表示されません）"
-  };
+  return { saved: "画像は取り込めませんでした。マイ画像から差分セットを作って設定してください" };
 }
 
 async function importChars(text, say) {
@@ -1040,12 +1124,10 @@ async function importChars(text, say) {
     const img = await importImages(list[i], tell);
     if (img.saved) notes.push(img.saved);
     const c = {
-      ...base, ...centerPos(base.w, base.h, i), z: topZ() + i, kind: "char",
+      ...base, ...centerPos(base.w, base.h, i), z: CHAR_Z, kind: "char",
       active: true, hideStatus: false, owner: S.pid, order: Date.now() + i
     };
     if (img.set) c.set = img.set;
-    if (img.icon) c.icon = img.icon;
-    if (img.faces && img.faces.length) c.faces = img.faces;
     last = (await push(rp("chars"), c)).key;
   }
   S.selChar = last;
@@ -1061,10 +1143,23 @@ function initPaste() {
   document.addEventListener("paste", (e) => {
     const t = e.target;
     if (t && (t.closest("input, textarea, select, [contenteditable]"))) return;
-    const text = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
-    if (!/^\s*[\[{]/.test(text || "")) return;
+    const cd = e.clipboardData;
+    if (!cd) return;
     e.preventDefault();
-    importChars(text, (m) => setStatus(m)).catch((err) => setStatus("取り込みに失敗しました: " + err.message, true));
+    const types = [...cd.types];
+    const texts = [];
+    types.filter((ty) => ty !== "Files").forEach((ty) => {
+      const t = cd.getData(ty) || "";
+      texts.push(t);
+      if (/html/.test(ty)) texts.push(new DOMParser().parseFromString(t, "text/html").documentElement.textContent || "");
+    });
+    const json = texts.map((t) => t.match(/[\[{][\s\S]*[\]}]/)).find((m) => m && /"(name|data|status|commands)"/.test(m[0]));
+    if (!json) {
+      const head = (cd.getData("text/plain") || "").slice(0, 30);
+      setStatus("駒のデータが見つかりませんでした（形式: " + (types.join(", ") || "なし") + (head ? "／中身: " + head : "") + "）", true);
+      return;
+    }
+    importChars(json[0], (m) => setStatus(m)).catch((err) => setStatus("取り込みに失敗しました: " + err.message, true));
   });
 }
 
@@ -1077,7 +1172,8 @@ function renderCharList() {
     th.alt = "";
     th.dataset.asset = charIcon(c);
     th.src = src(th.dataset.asset);
-    const tags = (isStand(c) ? "（立ち絵）" : "") + (c.owner === S.pid ? "（自分）" : "") + (c.kpOnly ? "（KPのみ）" : "") + (c.locked ? "（固定）" : "");
+    const who = c.owner === S.pid ? "（自分）" : S.isKP ? "（" + (playerName(c.owner) || "持ち主なし") + "）" : "";
+    const tags = (isStand(c) ? "（立ち絵）" : "") + who + (c.kpOnly ? "（KPのみ）" : "") + (c.locked ? "（固定）" : "");
     const name = el("span", "", (c.name || "（名前なし）") + tags);
     const off = c.active === false;
     const tg = el("button", "mini" + (off ? " primary" : ""), off ? "戻す" : "下げる");
@@ -1105,6 +1201,25 @@ function renderCharDetail() {
   $("cdParent").hidden = !stand;
   $("cdParent").textContent = parent ? "「" + (parent.name || "") + "」の発言で表情が切り替わります" : "元のキャラ駒が見つかりません（表情は切り替わりません）";
   $("cdLock").checked = !!c.locked;
+  const os = $("cdOwner");
+  if (document.activeElement !== os) {
+    os.replaceChildren();
+    const none = el("option", "", "なし（KP管理）");
+    none.value = "";
+    os.append(none);
+    Object.entries(S.players).sort((a, b) => (a[1].t || 0) - (b[1].t || 0)).forEach(([pid, p]) => {
+      const o = el("option", "", (p.name || "?") + (pid === S.pid ? "（自分）" : ""));
+      o.value = pid;
+      os.append(o);
+    });
+    if (c.owner && !S.players[c.owner]) {
+      const o = el("option", "", "一覧にいない人");
+      o.value = c.owner;
+      os.append(o);
+    }
+    os.value = c.owner || "";
+  }
+  if (document.activeElement !== $("cdLayer")) $("cdLayer").value = Number.isFinite(+c.z) ? Math.round(+c.z) : CHAR_Z;
   $("cdKpOnly").checked = !!c.kpOnly;
   const keep = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v; };
   keep("cdName", c.name || "");

@@ -1003,3 +1003,49 @@ body.booted .boot-warn {
 .row.wrap {
   flex-wrap: wrap;
 }
+
+.field.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.mlist li.player {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.player-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.player-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-state {
+  font-size: 11px;
+  color: var(--ok);
+}
+
+.player.away .player-state {
+  color: var(--sub);
+}
+
+.player.away .player-name {
+  opacity: 0.6;
+}
+
+.player-chars {
+  font-size: 12px;
+  color: var(--sub);
+  padding-left: 16px;
+}
+
+.player .mini {
+  padding: 2px 8px;
+  font-size: 12px;
+}
