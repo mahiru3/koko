@@ -26,6 +26,7 @@
     <span id="roomLabel" class="room-label"></span>
     <select id="systemSel" title="ダイスシステム"></select>
     <button id="copyUrl" type="button">招待URL</button>
+    <a class="btn-link" href="my.html" target="_blank" rel="noopener">マイ画像</a>
     <span class="zoom">
       <button id="zoomOut" type="button">−</button>
       <span id="zoomLabel">100%</span>
@@ -56,9 +57,7 @@
 
     <div id="tab-chat" class="panel">
       <ol id="log" class="log"></ol>
-      <div class="speaker-row">
-        <select id="speaker" title="発言キャラ"></select>
-      </div>
+      <div id="charBar" class="char-bar"></div>
       <div class="send">
         <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
         <button id="sendBtn" type="button" class="primary">送信</button>
@@ -83,6 +82,15 @@
     </div>
 
     <div id="tab-chars" class="panel" hidden>
+      <details class="acc-color-1" open>
+        <summary>キャラを取り込む（いあきゃら／ココフォリア駒コピー）</summary>
+        <textarea id="charJson" rows="3" spellcheck="false" placeholder="いあきゃらの出力や、ココフォリアの駒コピーを貼り付け"></textarea>
+        <div class="row">
+          <label class="file-btn">JSONファイル<input id="charJsonFile" type="file" accept=".json,.txt,application/json,text/plain" multiple></label>
+          <button id="charImport" type="button" class="primary">取り込む</button>
+        </div>
+        <p id="charImportMsg" class="msg"></p>
+      </details>
       <details class="acc-color-2">
         <summary>キャラを追加</summary>
         <div class="piece-form">
@@ -99,6 +107,8 @@
           <input id="cdName" maxlength="60">
           <input id="cdColor" type="color">
         </div>
+        <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
+        <label class="field">駒の大きさ<input id="cdSize" type="number" min="1" max="64" inputmode="numeric"></label>
         <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
         <label class="check"><input id="cdHide" type="checkbox">ステータスを隠す</label>
         <div id="cdFaces" class="faces"></div>

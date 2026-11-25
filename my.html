@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>マイ画像 - koko</title>
+<link rel="stylesheet" href="51-session.css">
+<link rel="stylesheet" href="51-my.css">
+<script type="module" src="51-my.js"></script>
+</head>
+<body class="my-body">
+<main class="my">
+  <header class="my-head">
+    <h1>マイ画像</h1>
+    <a class="btn-link" href="index.html">部屋へ</a>
+    <span id="status" class="status"></span>
+  </header>
+
+  <details class="acc-color-3 my-box">
+    <summary>引き継ぎコード（別のブラウザ・スマホで同じ画像を使う）</summary>
+    <p class="msg">このコードを別のブラウザで入力すると、同じ画像置き場とキャラを使えます。人には教えないでください。</p>
+    <div class="row">
+      <input id="codeShow" readonly>
+      <button id="codeCopy" type="button">コピー</button>
+    </div>
+    <div class="row">
+      <input id="codeInput" placeholder="別の端末で表示されたコードを貼り付け" autocomplete="off" spellcheck="false">
+      <button id="codeApply" type="button" class="primary">このコードを使う</button>
+    </div>
+    <p id="codeMsg" class="msg"></p>
+  </details>
+
+  <section class="my-box">
+    <div class="set-tabs">
+      <div id="setTabs" class="pal-tabs"></div>
+      <button id="setNew" type="button" class="primary">＋ ID作成</button>
+    </div>
+    <p id="setEmpty" class="msg">「＋ ID作成」でキャラごとの差分セットを作ります（例：ykn）。</p>
+
+    <div id="setEditor" class="set-editor" hidden>
+      <div class="row">
+        <label class="field id-field">ID<input id="setId" maxlength="20" spellcheck="false"></label>
+        <button id="setPrefix" type="button">IDをつける</button>
+        <button id="setDel" type="button" class="del">セットを削除</button>
+      </div>
+      <label id="drop" class="drop">
+        <span>画像をここにドラッグ、またはクリックして選ぶ（まとめて選べます）</span>
+        <input id="files" type="file" accept="image/*" multiple>
+      </label>
+      <p id="setMsg" class="msg"></p>
+      <table class="faces-table">
+        <thead><tr><th>呼び出し名</th><th>ファイル名</th><th>画像</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p id="usage" class="msg"></p>
+  <input id="replaceFile" type="file" accept="image/*" hidden>
+</main>
+</body>
+</html>

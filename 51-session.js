@@ -5,7 +5,8 @@ import {
   query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
 } from "./51-session-fb.js";
 import { parseTekeyJson, renderPalette, expandVars } from "./51-session-palette.js";
-import { readRoomZip, compressImage, assetKey } from "./51-session-import.js";
+import { readRoomZip, compressImage, assetKey, parseCharJson } from "./51-session-import.js";
+import { ensureProfile } from "./51-session-id.js";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -20,7 +21,8 @@ const S = {
   meta: {}, vars: {}, chars: {}, items: {}, markers: {}, scenes: {}, notes: {},
   assets: new Map(), nodes: new Map(),
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
-  speaker: "", selChar: "", palettes: [], palSel: ""
+  speaker: "", selChar: "", palettes: [], palSel: "",
+  pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false
 };
 
 function el(tag, cls, text) {
@@ -44,8 +46,60 @@ function newKey() {
   return Date.now().toString(36) + randomId(6);
 }
 
+function libSet(pid, sid) {
+  const k = pid + "/" + sid;
+  if (!S.libSubs.has("s:" + k)) {
+    S.libSubs.add("s:" + k);
+    onValue(ref(S.db, "lib/" + pid + "/sets/" + sid), (s) => {
+      S.libSets.set(k, s.val());
+      queueRender();
+      renderSpeaker();
+      renderCharList();
+      renderCharDetail();
+    });
+  }
+  return S.libSets.get(k) || null;
+}
+
+function libFile(pid, fk) {
+  const k = pid + "/" + fk;
+  if (!S.libSubs.has("f:" + k)) {
+    S.libSubs.add("f:" + k);
+    onValue(ref(S.db, "lib/" + pid + "/files/" + fk + "/data"), (s) => {
+      S.libFiles.set(k, s.val() || "");
+      queueRender();
+    });
+  }
+  return S.libFiles.get(k) || "";
+}
+
+function faceList(c) {
+  if (!c) return [];
+  if (c.set && c.set.pid && c.set.sid) {
+    const st = libSet(c.set.pid, c.set.sid);
+    return st && Array.isArray(st.faces)
+      ? st.faces.filter((f) => f && f.file).map((f) => ({ label: f.label || "", key: "lib:" + c.set.pid + "/" + f.file }))
+      : [];
+  }
+  return (Array.isArray(c.faces) ? c.faces : []).map((f) => ({ label: f.label || "", key: f.icon || "" }));
+}
+
+function charIcon(c) {
+  if (!c) return "";
+  const fl = faceList(c);
+  if (fl.length) {
+    const f = fl.find((x) => x.label && x.label === c.face) || (c.set ? fl[0] : null);
+    if (f && f.key) return f.key;
+  }
+  return c.icon || "";
+}
+
 function src(key) {
   if (!key) return "";
+  if (typeof key === "string" && key.startsWith("lib:")) {
+    const [pid, fk] = key.slice(4).split("/");
+    return pid && fk ? libFile(pid, fk) : "";
+  }
   if (typeof key === "string" && (key.startsWith("data:image/") || key.startsWith("https://"))) return key;
   return S.assets.get(key) || "";
 }
@@ -102,6 +156,7 @@ async function connect() {
   await new Promise((resolve) => {
     const off = onAuthStateChanged(auth, (u) => { if (u) { S.uid = u.uid; off(); resolve(); } });
   });
+  S.pid = (await ensureProfile(S.db, S.uid)).pid;
   const url = new URL(location.href);
   url.searchParams.set("room", S.roomId);
   history.replaceState(null, "", url);
@@ -139,6 +194,7 @@ async function startRoom() {
   });
   const watch = (name, after) => onValue(rp(name), (s) => { S[name] = s.val() || {}; if (after) after(); queueRender(); });
   watch("chars", () => { renderCharList(); renderSpeaker(); renderCharDetail(); renderPaletteTabs(); });
+  onValue(ref(S.db, "lib/" + S.pid + "/sets"), (s) => { S.mySets = s.val() || {}; renderCharDetail(); });
   watch("items");
   watch("markers");
   watch("scenes", renderScenes);
@@ -224,20 +280,50 @@ function initChat() {
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(input.value); }
   });
-  $("speaker").addEventListener("change", () => { S.speaker = $("speaker").value; localStorage.setItem("s51-speaker-" + S.roomId, S.speaker); renderPaletteTabs(); });
   S.speaker = localStorage.getItem("s51-speaker-" + S.roomId) || "";
   onChildAdded(query(rp("messages"), limitToLast(LOG_LIMIT)), (snap) => renderMessage(snap.val()));
 }
 
+function setSpeaker(id) {
+  S.speaker = id;
+  localStorage.setItem("s51-speaker-" + S.roomId, id);
+  const c = S.chars[id];
+  if (c && c.commands) S.palSel = "char:" + id;
+  renderSpeaker();
+  renderPaletteTabs();
+}
+
 function renderSpeaker() {
-  const sel = $("speaker");
-  sel.replaceChildren();
-  const me = el("option", "", S.name + "（プレイヤー）");
-  me.value = "";
-  sel.append(me);
-  sorted(S.chars, "order").forEach(([id, c]) => { const o = el("option", "", c.name || "（名前なし）"); o.value = id; sel.append(o); });
+  const bar = $("charBar");
   if (S.speaker && !S.chars[S.speaker]) S.speaker = "";
-  sel.value = S.speaker;
+  bar.replaceChildren();
+  const mk = (id, name, icon, color) => {
+    const b = el("button", "cb" + (S.speaker === id ? " on" : ""));
+    b.type = "button";
+    b.title = name;
+    if (icon) {
+      const im = el("img");
+      im.alt = "";
+      im.dataset.asset = icon;
+      im.src = src(icon);
+      b.append(im);
+    } else {
+      const f = el("span", "cb-fb", (name || "?").slice(0, 1));
+      f.style.background = color || "#888";
+      b.append(f);
+    }
+    b.append(el("span", "cb-name", name));
+    b.addEventListener("click", () => setSpeaker(id));
+    bar.append(b);
+  };
+  mk("", S.name, "", S.color);
+  sorted(S.chars, "order")
+    .filter(([id, c]) => S.showAllChars || c.owner === S.pid || id === S.speaker)
+    .forEach(([id, c]) => mk(id, c.name || "（名前なし）", charIcon(c), c.color));
+  const t = el("button", "cb-toggle", S.showAllChars ? "自分のだけ" : "全キャラ");
+  t.type = "button";
+  t.addEventListener("click", () => { S.showAllChars = !S.showAllChars; renderSpeaker(); });
+  bar.append(t);
 }
 
 async function submit(raw) {
@@ -315,10 +401,24 @@ async function postSystem(text) {
 async function sendChat(rawText, charId) {
   const c = S.chars[charId] || null;
   let text = rawText;
-  let icon = c ? c.icon || "" : "";
-  if (c && Array.isArray(c.faces)) {
-    const face = c.faces.find((f) => f.label && f.label.startsWith("@") && text.includes(f.label));
-    if (face) { icon = face.icon || icon; text = text.replace(face.label, "").trim() || text; }
+  let icon = charIcon(c);
+  if (c) {
+    let hit = null;
+    faceList(c)
+      .filter((f) => f.label && f.label.startsWith("@"))
+      .sort((a, b) => b.label.length - a.label.length)
+      .forEach((f) => {
+        if (text.includes(f.label)) {
+          text = text.split(f.label).join("");
+          if (!hit) hit = f;
+        }
+      });
+    if (hit) {
+      icon = hit.key || icon;
+      text = text.replace(/^[ \u3000]+/, "").replace(/[ \u3000]+$/, "");
+      await update(rp("chars/" + charId), { face: hit.label });
+      if (!text.trim()) return;
+    }
   }
   const expanded = expandVars(text, lookupVars(c));
   const first = expanded.split("\n")[0].trim();
@@ -532,7 +632,7 @@ function drawObject({ kind, id, o }) {
   node.classList.toggle("clickable", !!o.click);
   node.title = kind === "markers" ? (o.text || "") : (o.memo || "");
   const img = node.querySelector(".obj-img");
-  const s = src(kind === "items" && o.closed ? o.cover : (kind === "chars" ? o.icon : o.img));
+  const s = src(kind === "items" && o.closed ? o.cover : (kind === "chars" ? charIcon(o) : o.img));
   if (img.getAttribute("src") !== s) { if (s) img.src = s; else img.removeAttribute("src"); }
   img.hidden = !s;
   if (kind === "chars") {
@@ -613,9 +713,9 @@ function onObjectClick(kind, id, o) {
   }
   if (kind === "chars") {
     S.selChar = id;
+    if (o.owner === S.pid) setSpeaker(id);
     renderCharList();
     renderCharDetail();
-    showTab("chars");
   }
 }
 
@@ -673,11 +773,24 @@ function renderVars() {
 function initChars() {
   $("pieceAdd").addEventListener("click", addChar);
   $("cdSpeak").addEventListener("click", () => {
-    S.speaker = S.selChar;
-    localStorage.setItem("s51-speaker-" + S.roomId, S.speaker);
-    renderSpeaker();
-    renderPaletteTabs();
+    setSpeaker(S.selChar);
     showTab("chat");
+  });
+  $("cdSet").addEventListener("change", () => {
+    if (!S.selChar) return;
+    const v = $("cdSet").value;
+    if (v === "__keep") return;
+    update(rp("chars/" + S.selChar), { set: v ? { pid: S.pid, sid: v } : null, face: null });
+  });
+  $("cdSize").addEventListener("change", () => {
+    if (!S.selChar) return;
+    const n = Math.max(1, Math.min(64, parseInt($("cdSize").value, 10) || 1));
+    update(rp("chars/" + S.selChar), { w: n, h: n });
+  });
+  $("charImport").addEventListener("click", () => importChars($("charJson").value));
+  $("charJsonFile").addEventListener("change", async (e) => {
+    for (const f of e.target.files) await importChars(await f.text());
+    e.target.value = "";
   });
   $("cdDelete").addEventListener("click", () => {
     if (S.selChar && confirm("このキャラを削除しますか？")) { remove(rp("chars/" + S.selChar)); S.selChar = ""; }
@@ -719,7 +832,7 @@ async function addChar() {
   const c = {
     name: name.slice(0, 60), color: $("pieceColor").value,
     x: Math.round(f.x + 2 + Math.random() * 4), y: Math.round(f.y + 2 + Math.random() * 4), z: 100,
-    w: 2, h: 2, status: [{ label: "HP", value: 10, max: 10 }, { label: "MP", value: 10, max: 10 }, { label: "SAN", value: 50, max: 99 }],
+    w: 4, h: 4, owner: S.pid, status: [{ label: "HP", value: 10, max: 10 }, { label: "MP", value: 10, max: 10 }, { label: "SAN", value: 50, max: 99 }],
     params: [], commands: "", memo: "", active: true, order: Date.now()
   };
   try {
@@ -727,6 +840,9 @@ async function addChar() {
     if ($("pieceFile").files[0]) { $("pieceMsg").textContent = "画像を圧縮中…"; c.icon = await uploadAsset($("pieceFile").files[0], 512); }
     const r = await push(rp("chars"), c);
     S.selChar = r.key;
+    setSpeaker(r.key);
+    renderCharList();
+    renderCharDetail();
     $("pieceName").value = "";
     $("pieceFile").value = "";
     $("pieceMsg").textContent = "追加しました";
@@ -737,6 +853,27 @@ async function addChar() {
   }
 }
 
+async function importChars(text) {
+  const msg = $("charImportMsg");
+  if (!text.trim()) { msg.textContent = "貼り付けるか、ファイルを選んでください"; return; }
+  let list;
+  try { list = parseCharJson(text); }
+  catch (e) { msg.textContent = "読み込めませんでした（JSONの形ではないようです）"; return; }
+  if (!list.length) { msg.textContent = "キャラのデータが見つかりませんでした"; return; }
+  const f = fieldRect();
+  let last = "";
+  for (let i = 0; i < list.length; i++) {
+    const c = { ...list[i], x: Math.round(f.x + 2 + i * 5), y: Math.round(f.y + 2), z: 100, active: true, hideStatus: false, owner: S.pid, order: Date.now() + i };
+    last = (await push(rp("chars"), c)).key;
+  }
+  S.selChar = last;
+  setSpeaker(last);
+  renderCharList();
+  renderCharDetail();
+  $("charJson").value = "";
+  msg.textContent = list.map((c) => c.name).join("、") + " を取り込みました";
+}
+
 function renderCharList() {
   const list = $("charList");
   list.replaceChildren();
@@ -744,9 +881,9 @@ function renderCharList() {
     const li = el("li", id === S.selChar ? "current" : "");
     const th = el("img", "thumb round");
     th.alt = "";
-    th.dataset.asset = c.icon || "";
-    th.src = src(c.icon);
-    const name = el("span", "", (c.name || "（名前なし）") + (c.active === false ? "（盤外）" : ""));
+    th.dataset.asset = charIcon(c);
+    th.src = src(th.dataset.asset);
+    const name = el("span", "", (c.name || "（名前なし）") + (c.owner === S.pid ? "（自分）" : "") + (c.active === false ? "（盤外）" : ""));
     li.append(th, name);
     li.addEventListener("click", () => { S.selChar = id; renderCharList(); renderCharDetail(); });
     list.append(li);
@@ -763,20 +900,39 @@ function renderCharDetail() {
   keep("cdMemo", c.memo || "");
   keep("cdCommands", c.commands || "");
   $("cdActive").checked = c.active !== false;
+  if (document.activeElement !== $("cdSize")) $("cdSize").value = c.w || 1;
+  const setSel = $("cdSet");
+  setSel.replaceChildren();
+  const none = el("option", "", "なし（駒に直接入れた画像）");
+  none.value = "";
+  setSel.append(none);
+  Object.entries(S.mySets || {}).sort((a, b) => (a[1].order || 0) - (b[1].order || 0)).forEach(([k, st]) => {
+    const o = el("option", "", st.id + "（" + (st.faces || []).length + "枚）");
+    o.value = k;
+    setSel.append(o);
+  });
+  if (c.set && c.set.pid !== S.pid) {
+    const o = el("option", "", "ほかの人のセット");
+    o.value = "__keep";
+    setSel.append(o);
+    setSel.value = "__keep";
+  } else {
+    setSel.value = c.set ? c.set.sid : "";
+  }
   $("cdHide").checked = !!c.hideStatus;
 
   const faces = $("cdFaces");
   faces.replaceChildren();
-  (c.faces || []).forEach((fc) => {
-    const b = el("button", "face-btn");
+  faceList(c).forEach((fc) => {
+    const b = el("button", "face-btn" + (fc.label && fc.label === c.face ? " on" : ""));
     b.type = "button";
-    b.title = (fc.label || "") + "（クリックで駒の画像にする）";
+    b.title = (fc.label || "") + "（クリックでこの表情にする）";
     const im = el("img");
     im.alt = "";
-    im.dataset.asset = fc.icon || "";
-    im.src = src(fc.icon);
+    im.dataset.asset = fc.key || "";
+    im.src = src(fc.key);
     b.append(im, el("span", "", fc.label || "-"));
-    b.addEventListener("click", () => update(rp("chars/" + S.selChar), { icon: fc.icon || "" }));
+    b.addEventListener("click", () => update(rp("chars/" + S.selChar), { face: fc.label || null }));
     faces.append(b);
   });
 
@@ -916,7 +1072,7 @@ function renderPaletteView() {
   const cur = allPalettes().find((p) => p.id === S.palSel);
   const view = $("palView");
   if (!cur) { view.replaceChildren(); return; }
-  const who = () => (cur.name && charByName(cur.name)) || S.speaker;
+  const who = () => (cur.id.startsWith("char:") ? cur.id.slice(5) : (cur.name && charByName(cur.name)) || S.speaker);
   renderPalette(cur.stock, view, el, {
     fill: (cmd) => { $("chatInput").value = cmd; showTab("chat"); $("chatInput").focus(); },
     send: (cmd) => sendChat(cmd, who()).catch((err) => setStatus("送信失敗: " + err.message, true))
