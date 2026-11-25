@@ -6,6 +6,7 @@
 <title>TRPGセッション テスト</title>
 <link rel="stylesheet" href="51-session.css">
 <script src="51-session-bcdice.js"></script>
+<script src="51-session-jszip.js"></script>
 <script type="module" src="51-session.js"></script>
 </head>
 <body>
@@ -24,52 +25,133 @@
   <header class="bar">
     <span id="roomLabel" class="room-label"></span>
     <select id="systemSel" title="ダイスシステム"></select>
-    <button id="copyUrl" type="button">招待URLコピー</button>
+    <button id="copyUrl" type="button">招待URL</button>
+    <span class="zoom">
+      <button id="zoomOut" type="button">−</button>
+      <span id="zoomLabel">100%</span>
+      <button id="zoomIn" type="button">＋</button>
+      <button id="zoomFit" type="button">全体</button>
+    </span>
     <span id="memberCount" class="count"></span>
     <span id="status" class="status"></span>
   </header>
 
   <section id="boardWrap" class="board-wrap">
-    <div id="board" class="board"></div>
+    <div id="sizer" class="sizer">
+      <div id="board" class="board">
+        <div id="field" class="field-rect"></div>
+      </div>
+    </div>
   </section>
 
   <aside class="side">
     <nav class="tabs">
       <button type="button" data-tab="chat" class="on">チャット</button>
       <button type="button" data-tab="palette">チャパレ</button>
-      <button type="button" data-tab="pieces">駒</button>
-      <button type="button" data-tab="members">参加者</button>
+      <button type="button" data-tab="chars">キャラ</button>
+      <button type="button" data-tab="scenes">シーン</button>
+      <button type="button" data-tab="notes">メモ</button>
+      <button type="button" data-tab="room">部屋</button>
     </nav>
 
     <div id="tab-chat" class="panel">
       <ol id="log" class="log"></ol>
+      <div class="speaker-row">
+        <select id="speaker" title="発言キャラ"></select>
+      </div>
       <div class="send">
-        <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CC&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
+        <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
         <button id="sendBtn" type="button" class="primary">送信</button>
       </div>
     </div>
 
     <div id="tab-palette" class="panel" hidden>
-      <details class="acc-color-1">
-        <summary>チャパレを編集</summary>
-        <textarea id="paletteText" rows="8" spellcheck="false" placeholder="1行に1コマンド&#10;//変数名=値 で変数定義、{変数名} で参照"></textarea>
-      </details>
-      <ul id="paletteList" class="palette"></ul>
-    </div>
-
-    <div id="tab-pieces" class="panel" hidden>
-      <div class="piece-form">
-        <input id="pieceName" maxlength="30" placeholder="駒の名前">
-        <input id="pieceColor" type="color" value="#d94a4a">
-        <label class="file">画像<input id="pieceFile" type="file" accept="image/*"></label>
-        <button id="pieceAdd" type="button" class="primary">駒を追加</button>
+      <div class="pal-tabs" id="palTabs"></div>
+      <div class="pal-tools">
+        <label class="file-btn">Tekey JSON読込<input id="tekeyFile" type="file" accept=".json,application/json" multiple></label>
+        <button id="palNew" type="button">新規</button>
+        <button id="palEdit" type="button">編集</button>
+        <button id="palDel" type="button" class="del">削除</button>
       </div>
-      <p id="pieceMsg" class="msg"></p>
-      <ul id="pieceList" class="plist"></ul>
+      <p id="palMsg" class="msg"></p>
+      <div id="palEditor" class="pal-editor" hidden>
+        <input id="palLabel" maxlength="40" placeholder="タブ名">
+        <input id="palName" maxlength="60" placeholder="発言キャラ名（空なら選択中のキャラ）">
+        <textarea id="palStock" rows="10" spellcheck="false"></textarea>
+      </div>
+      <div id="palView" class="pal-view"></div>
     </div>
 
-    <div id="tab-members" class="panel" hidden>
-      <ul id="memberList" class="mlist"></ul>
+    <div id="tab-chars" class="panel" hidden>
+      <details class="acc-color-2">
+        <summary>キャラを追加</summary>
+        <div class="piece-form">
+          <input id="pieceName" maxlength="60" placeholder="名前">
+          <input id="pieceColor" type="color" value="#d94a4a">
+          <label class="file">画像<input id="pieceFile" type="file" accept="image/*"></label>
+          <button id="pieceAdd" type="button" class="primary">追加</button>
+        </div>
+        <p id="pieceMsg" class="msg"></p>
+      </details>
+      <ul id="charList" class="plist"></ul>
+      <div id="charDetail" class="char-detail" hidden>
+        <div class="row">
+          <input id="cdName" maxlength="60">
+          <input id="cdColor" type="color">
+        </div>
+        <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
+        <label class="check"><input id="cdHide" type="checkbox">ステータスを隠す</label>
+        <div id="cdFaces" class="faces"></div>
+        <table class="st"><tbody id="cdStatus"></tbody></table>
+        <button id="cdAddStatus" type="button">ステータス追加</button>
+        <table class="st"><tbody id="cdParams"></tbody></table>
+        <button id="cdAddParam" type="button">パラメータ追加</button>
+        <label class="field">メモ<textarea id="cdMemo" rows="3"></textarea></label>
+        <label class="field">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
+        <div class="row">
+          <button id="cdSpeak" type="button" class="primary">このキャラで発言</button>
+          <button id="cdDelete" type="button" class="del">削除</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-scenes" class="panel" hidden>
+      <ul id="sceneList" class="plist"></ul>
+    </div>
+
+    <div id="tab-notes" class="panel" hidden>
+      <div id="noteList" class="notes"></div>
+    </div>
+
+    <div id="tab-room" class="panel" hidden>
+      <details class="acc-color-3" open>
+        <summary>ココフォリアの room.zip を読み込む</summary>
+        <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
+        <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・メモを置き換える</label>
+        <p id="zipMsg" class="msg"></p>
+      </details>
+      <details class="acc-color-4" open>
+        <summary>盤面</summary>
+        <label class="field">盤面サイズ倍率
+          <select id="fieldMult">
+            <option value="1">×1</option>
+            <option value="2">×2</option>
+            <option value="4" selected>×4（ココフォリア相当）</option>
+          </select>
+        </label>
+        <label class="check"><input id="gridShow" type="checkbox">グリッドを表示</label>
+        <label class="file">背景画像<input id="bgFile" type="file" accept="image/*"></label>
+        <label class="file">前景画像<input id="fgFile" type="file" accept="image/*"></label>
+      </details>
+      <details class="acc-color-1" open>
+        <summary>ルーム変数</summary>
+        <ul id="varList" class="mlist"></ul>
+      </details>
+      <details class="acc-color-2" open>
+        <summary>参加者</summary>
+        <ul id="memberList" class="mlist"></ul>
+      </details>
+      <p id="assetInfo" class="msg"></p>
     </div>
   </aside>
 </main>

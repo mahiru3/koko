@@ -4,30 +4,38 @@
       "$room": {
         ".read": "auth != null && $room.matches(/^[a-z0-9-]{4,40}$/)",
         "meta": {
-          ".write": "auth != null",
-          "system": {
-            ".validate": "newData.isString() && newData.val().length <= 60"
+          ".write": "auth != null"
+        },
+        "assets": {
+          "$asset": {
+            ".write": "auth != null",
+            ".validate": "newData.isString() && newData.val().length <= 400000 && newData.val().beginsWith('data:image/')"
           }
+        },
+        "chars": {
+          ".write": "auth != null"
+        },
+        "items": {
+          ".write": "auth != null"
+        },
+        "markers": {
+          ".write": "auth != null"
+        },
+        "scenes": {
+          ".write": "auth != null"
+        },
+        "notes": {
+          ".write": "auth != null"
         },
         "members": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid",
-            ".validate": "!newData.exists() || (newData.child('name').isString() && newData.child('name').val().length <= 30)"
+            ".write": "auth != null && auth.uid === $uid"
           }
         },
         "messages": {
           "$msg": {
             ".write": "auth != null && !data.exists() && newData.child('uid').val() === auth.uid",
-            ".validate": "newData.hasChildren(['uid', 'name', 'text', 't']) && newData.child('text').isString() && newData.child('text').val().length <= 2000 && newData.child('name').val().length <= 30 && newData.child('t').val() <= now",
-            "dice": {
-              ".validate": "newData.isString() && newData.val().length <= 2000"
-            }
-          }
-        },
-        "pieces": {
-          "$piece": {
-            ".write": "auth != null",
-            ".validate": "!newData.exists() || (newData.child('x').isNumber() && newData.child('y').isNumber() && (!newData.child('img').exists() || (newData.child('img').isString() && newData.child('img').val().length <= 200000)))"
+            ".validate": "newData.hasChildren(['uid', 'name', 'text', 't']) && newData.child('text').isString() && newData.child('text').val().length <= 2000 && newData.child('name').val().length <= 60 && newData.child('t').val() <= now"
           }
         }
       }
