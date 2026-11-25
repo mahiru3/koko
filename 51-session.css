@@ -1049,3 +1049,173 @@ body.booted .boot-warn {
   padding: 2px 8px;
   font-size: 12px;
 }
+
+.room.kp-open {
+  grid-template-columns: 360px minmax(0, 1fr) 400px;
+  grid-template-areas:
+    "bar bar bar"
+    "kp board side";
+}
+
+.side.kp-side {
+  grid-area: kp;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
+
+.tabs-title {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1d1f24;
+  background: var(--crit);
+}
+
+.kp-toggle.on {
+  background: var(--crit);
+  border-color: var(--crit);
+  color: #1d1f24;
+}
+
+.me {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.me-name {
+  max-width: 10em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ver {
+  font-size: 10px;
+  color: var(--sub);
+}
+
+.obj.hidden-obj {
+  opacity: 0.35;
+  outline: 1px dashed var(--sub);
+}
+
+.plist.compact li {
+  padding: 3px 6px;
+}
+
+.plist .z-tag {
+  flex: none;
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.obj-editor,
+.img-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.obj-editor {
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.obj-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+  gap: 6px;
+}
+
+.field.small input {
+  width: 100%;
+}
+
+.pick-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.pick-head .mini,
+.pick-head .file-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.pick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(56px, 1fr));
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+  padding-top: 4px;
+}
+
+.pick-item {
+  padding: 2px;
+  aspect-ratio: 1;
+}
+
+.pick-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.pick-item.on {
+  border-color: var(--crit);
+  border-width: 2px;
+}
+
+.note .row {
+  margin: 6px 0;
+}
+
+.note .row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.note-edit {
+  width: 100%;
+  resize: vertical;
+}
+
+.mlist .mini.on {
+  background: var(--crit);
+  border-color: var(--crit);
+  color: #1d1f24;
+}
+
+@media (max-width: 800px) {
+  .room.kp-open {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "bar"
+      "board"
+      "kp";
+  }
+
+  .room.kp-open .pl-side {
+    display: none;
+  }
+
+  .side.kp-side {
+    border-right: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .ver {
+    display: none;
+  }
+}

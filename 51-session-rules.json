@@ -1,42 +1,63 @@
 {
-  // koko rules v4a-2 2026-11-25
+  // koko rules v4b 2026-11-25
   "rules": {
     "rooms": {
       "$room": {
         ".read": "auth != null && $room.matches(/^[a-z0-9-]{4,40}$/)",
         ".write": "auth != null && !newData.exists() && data.child('meta/owner').exists() && data.child('meta/owner').val() === root.child('links/' + auth.uid + '/pid').val()",
         "meta": {
-          ".write": "auth != null"
+          "owner": {
+            ".write": "auth != null && !data.exists() && newData.val() === root.child('links/' + auth.uid + '/pid').val()"
+          },
+          "kps": {
+            ".write": "auth != null && root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val()"
+          },
+          "$other": {
+            ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
+          }
         },
         "assets": {
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))",
           "$asset": {
-            ".write": "auth != null",
+            ".write": "auth != null && !data.exists()",
             ".validate": "newData.isString() && newData.val().length <= 400000 && newData.val().beginsWith('data:image/')"
           }
         },
         "chars": {
-          ".write": "auth != null"
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))",
+          "$cid": {
+            ".write": "auth != null && ((!data.exists() && newData.child('owner').val() === root.child('links/' + auth.uid + '/pid').val()) || (data.child('owner').val() === root.child('links/' + auth.uid + '/pid').val() && (!newData.exists() || newData.child('owner').val() === root.child('links/' + auth.uid + '/pid').val())))",
+            "x": {
+              ".write": "auth != null && data.parent().exists()",
+              ".validate": "newData.isNumber()"
+            },
+            "y": {
+              ".write": "auth != null && data.parent().exists()",
+              ".validate": "newData.isNumber()"
+            }
+          }
         },
         "items": {
-          ".write": "auth != null"
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
         },
         "markers": {
-          ".write": "auth != null"
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
         },
         "scenes": {
-          ".write": "auth != null"
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
         },
         "notes": {
-          ".write": "auth != null"
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
         },
         "players": {
           "$pid": {
-            ".write": "auth != null"
+            ".write": "auth != null && ($pid === root.child('links/' + auth.uid + '/pid').val() || (auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true)))",
+            ".validate": "!newData.exists() || (newData.hasChildren(['name']) && newData.child('name').isString() && newData.child('name').val().length <= 60)"
           }
         },
         "kick": {
           "$pid": {
-            ".write": "auth != null"
+            ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true)) || (auth != null && $pid === root.child('links/' + auth.uid + '/pid').val() && !newData.exists())"
           }
         },
         "members": {

@@ -1,10 +1,10 @@
-import { firebaseConfig } from "./51-session-config.js";
+import { firebaseConfig } from "./51-session-config.js?v=4b";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, serverTimestamp, connectDatabaseEmulator
-} from "./51-session-fb.js";
-import { ensureProfile, applyTransfer, transferCode, rand } from "./51-session-id.js";
-import { compressImage } from "./51-session-import.js";
+} from "./51-session-fb.js?v=4b";
+import { ensureProfile, applyTransfer, transferCode, rand } from "./51-session-id.js?v=4b";
+import { compressImage } from "./51-session-import.js?v=4b";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);

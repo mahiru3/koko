@@ -1,12 +1,12 @@
-import { firebaseConfig } from "./51-session-config.js";
+import { firebaseConfig } from "./51-session-config.js?v=4b";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, onChildAdded,
   onChildRemoved, query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
-} from "./51-session-fb.js";
-import { parseTekeyJson, renderPalette, expandVars } from "./51-session-palette.js";
-import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js";
-import { ensureProfile } from "./51-session-id.js";
+} from "./51-session-fb.js?v=4b";
+import { parseTekeyJson, renderPalette, expandVars } from "./51-session-palette.js?v=4b";
+import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4b";
+import { ensureProfile } from "./51-session-id.js?v=4b";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -25,7 +25,7 @@ const S = {
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
   speaker: "", selChar: "", palettes: [], palSel: "",
   pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false,
-  isKP: false, off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {}
+  isKP: false, isOwner: false, kpOpen: true, selItem: "", selMarker: "", off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {}
 };
 
 function kpCheck() {
@@ -39,6 +39,10 @@ function visibleChar(c) {
 
 function isStand(c) {
   return !!c && c.kind === "stand";
+}
+
+function canEdit(c) {
+  return !!c && (S.isKP || c.owner === S.pid);
 }
 
 function canSeeStatus(c) {
@@ -192,6 +196,8 @@ async function connect() {
   $("join").hidden = true;
   $("room").hidden = false;
   $("roomLabel").textContent = S.roomId;
+  $("meName").textContent = S.name;
+  $("meName").style.color = S.color;
   startRoom();
 }
 
@@ -209,8 +215,8 @@ async function startRoom() {
     try { await navigator.clipboard.writeText(location.href); setStatus("URLをコピーしました"); }
     catch (e) { prompt("このURLを共有してください", location.href); }
   });
-  onChildAdded(rp("assets"), (s) => { S.assets.set(s.key, s.val()); queueRender(); updateAssetInfo(); });
-  onChildRemoved(rp("assets"), (s) => { S.assets.delete(s.key); queueRender(); updateAssetInfo(); });
+  onChildAdded(rp("assets"), (s) => { S.assets.set(s.key, s.val()); queueRender(); updateAssetInfo(); queueAssetUi(); });
+  onChildRemoved(rp("assets"), (s) => { S.assets.delete(s.key); queueRender(); updateAssetInfo(); queueAssetUi(); });
   onValue(rp("meta"), (s) => {
     const raw = s.val();
     if (!raw && S.metaSeen) setStatus("この部屋は削除されたか、空になりました", true);
@@ -218,9 +224,12 @@ async function startRoom() {
     S.meta = raw || {};
     if (!S.meta.owner && S.created && S.created === S.roomId) { S.created = ""; set(rp("meta/owner"), S.pid); }
     const kp = kpCheck();
+    S.isOwner = !!S.pid && S.meta.owner === S.pid;
     if (kp !== S.isKP) { S.isKP = kp; renderCharList(); renderSpeaker(); renderCharDetail(); }
     renderPlayers();
-    renderRoomAdmin();
+    applyKpLayout();
+    renderBoardPickers();
+    renderObjLists();
     S.vars = S.meta.vars || {};
     const b = S.meta.board || {};
     const sig = [b.fieldW, b.fieldH, b.fg, S.meta.fieldMult].join("|");
@@ -234,20 +243,44 @@ async function startRoom() {
   const watch = (name, after) => onValue(rp(name), (s) => { S[name] = s.val() || {}; if (after) after(); queueRender(); });
   watch("chars", () => { renderCharList(); renderSpeaker(); renderCharDetail(); renderPaletteTabs(); renderPlayers(); });
   onValue(ref(S.db, "lib/" + S.pid + "/sets"), (s) => { S.mySets = s.val() || {}; renderCharDetail(); });
-  watch("items");
-  watch("markers");
+  watch("items", renderObjLists);
+  watch("markers", renderObjLists);
   watch("scenes", renderScenes);
   watch("notes", renderNotes);
 }
 
 function initTabs() {
   document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));
+  $("kpToggle").addEventListener("click", () => {
+    S.kpOpen = !S.kpOpen;
+    localStorage.setItem("s51-kpopen", S.kpOpen ? "1" : "");
+    applyKpLayout();
+  });
+  S.kpOpen = localStorage.getItem("s51-kpopen") !== "";
 }
 
 function showTab(name) {
-  document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
-  document.querySelectorAll(".panel").forEach((p) => { p.hidden = p.id !== "tab-" + name; });
+  const panel = $("tab-" + name);
+  if (!panel) return;
+  const side = panel.closest(".side");
+  side.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("on", b.dataset.tab === name));
+  side.querySelectorAll(".panel").forEach((p) => { p.hidden = p !== panel; });
   if (name === "chat") scrollLog(true);
+}
+
+function applyKpLayout() {
+  const show = S.isKP && S.kpOpen;
+  $("kpSide").hidden = !show;
+  $("room").classList.toggle("kp-open", show);
+  $("kpToggle").hidden = !S.isKP;
+  $("kpToggle").classList.toggle("on", show);
+  $("kpBadge").hidden = !S.isKP;
+  $("kpBadge").textContent = S.isOwner ? "KP" : "KP権限";
+  $("kpClaim").hidden = !!S.meta.owner;
+  $("systemSel").disabled = !S.isKP;
+  document.querySelectorAll(".owner-only").forEach((n) => { n.hidden = !S.isOwner; });
+  document.querySelectorAll(".owner-note").forEach((n) => { n.hidden = S.isOwner; });
+  queueRender();
 }
 
 async function initSystems() {
@@ -316,8 +349,15 @@ function renderPlayers() {
     const dot = el("span", "dot");
     dot.style.background = p.color || "#888";
     const isOwner = p.pid && S.meta.owner === p.pid;
-    head.append(dot, el("span", "player-name", p.name + (isOwner ? "（KP）" : "") + (p.pid === S.pid ? "（自分）" : "")), el("span", "player-state", !p.pid || on.has(p.pid) ? "接続中" : "オフライン"));
-    if (S.isKP && p.pid && p.pid !== S.pid) {
+    const hasKp = !!(p.pid && S.meta.kps && S.meta.kps[p.pid]);
+    head.append(dot, el("span", "player-name", p.name + (isOwner ? "（KP）" : hasKp ? "（KP権限）" : "") + (p.pid === S.pid ? "（自分）" : "")), el("span", "player-state", !p.pid || on.has(p.pid) ? "接続中" : "オフライン"));
+    if (S.isOwner && p.pid && !isOwner) {
+      const g = el("button", "mini" + (hasKp ? " on" : ""), hasKp ? "権限を戻す" : "KP権限を渡す");
+      g.type = "button";
+      g.addEventListener("click", () => toggleKp(p.pid, !hasKp));
+      head.append(g);
+    }
+    if (S.isKP && p.pid && p.pid !== S.pid && !isOwner) {
       const kick = el("button", "mini del", "外す");
       kick.type = "button";
       kick.addEventListener("click", () => removePlayer(p.pid));
@@ -341,11 +381,21 @@ function renderPlayers() {
   $("memberCount").textContent = Object.keys(S.online).length + "人";
 }
 
+async function toggleKp(pid, on) {
+  if (!S.isOwner) return;
+  const name = playerName(pid) || "この参加者";
+  if (on && !confirm(name + " にKP権限を渡しますか？\n（KPパレット・/var・パネル編集・駒の持ち主変更・参加者を外す、ができるようになります。部屋の削除と権限の付け外しはできません）")) return;
+  await set(rp("meta/kps/" + pid), on ? true : null);
+  await postSystem(name + (on ? " にKP権限を渡しました" : " のKP権限を戻しました"));
+}
+
 async function removePlayer(pid) {
   if (!S.isKP) return;
   const name = playerName(pid) || "この参加者";
   if (!confirm(name + " を部屋から外しますか？\n・参加者一覧から消えます\n・接続中なら入室前の画面に戻ります（もう一度入室はできます）\n・その人の駒は残り、持ち主なし（KP管理）になります")) return;
+  if (S.meta.owner === pid) return;
   const up = { ["players/" + pid]: null };
+  if (S.isOwner && S.meta.kps && S.meta.kps[pid]) up["meta/kps/" + pid] = null;
   Object.entries(S.chars).forEach(([id, c]) => { if (c.owner === pid) up["chars/" + id + "/owner"] = null; });
   if (onlinePids().has(pid)) up["kick/" + pid] = Date.now();
   await update(rp(""), up);
@@ -415,12 +465,14 @@ function renderSpeaker() {
   };
   mk("", S.name, "", S.color);
   sorted(S.chars, "order")
-    .filter(([id, c]) => !isStand(c) && visibleChar(c) && (S.showAllChars || c.owner === S.pid || id === S.speaker))
+    .filter(([id, c]) => !isStand(c) && visibleChar(c) && ((S.isKP && S.showAllChars) || c.owner === S.pid || (id === S.speaker && canEdit(c))))
     .forEach(([id, c]) => mk(id, c.name || "（名前なし）", charIcon(c), c.color));
-  const t = el("button", "cb-toggle", S.showAllChars ? "自分のだけ" : "全キャラ");
-  t.type = "button";
-  t.addEventListener("click", () => { S.showAllChars = !S.showAllChars; renderSpeaker(); });
-  bar.append(t);
+  if (S.isKP) {
+    const t = el("button", "cb-toggle", S.showAllChars ? "自分のだけ" : "全キャラ");
+    t.type = "button";
+    t.addEventListener("click", () => { S.showAllChars = !S.showAllChars; renderSpeaker(); });
+    bar.append(t);
+  }
 }
 
 async function submit(raw) {
@@ -453,6 +505,7 @@ async function statusCommand(line, charId) {
   if (!m) return null;
   const c = S.chars[charId];
   if (!c) return { error: "ステータスを変えるには発言キャラを選んでください" };
+  if (!canEdit(c)) return { error: "ほかの人の駒のステータスは変えられません" };
   const label = m[1];
   const v = evalNumber(m[3] || "0");
   if (Number.isNaN(v.n)) return { error: "値を計算できませんでした: " + m[3] };
@@ -497,7 +550,8 @@ async function postSystem(text) {
   await push(rp("messages"), { uid: S.uid, name: "system", color: "#888888", text: text.slice(0, 2000), sys: true, t: serverTimestamp() });
 }
 
-async function sendChat(rawText, charId) {
+async function sendChat(rawText, charId0) {
+  const charId = S.chars[charId0] && canEdit(S.chars[charId0]) ? charId0 : "";
   const c = S.chars[charId] || null;
   let text = rawText;
   let icon = charIcon(c);
@@ -523,6 +577,7 @@ async function sendChat(rawText, charId) {
   const first = expanded.split("\n")[0].trim();
 
   if (/^\/scene(\s|$)/.test(first)) {
+    if (!S.isKP) { setStatus("シーンの切替はKPとKP権限の人だけができます", true); return; }
     const name = first.replace(/^\/scene\s*/, "").trim();
     const hit = Object.entries(S.scenes).find(([, s]) => (s.name || "") === name);
     if (!hit) { await postSystem("シーン「" + name + "」が見つかりません"); return; }
@@ -531,6 +586,7 @@ async function sendChat(rawText, charId) {
   }
   if (/^\/var\s/.test(text.split("\n")[0])) {
     const m = text.split("\n")[0].match(/^\/var\s+(\S+)\s?(.*)$/);
+    if (m && !S.isKP) { setStatus("ルーム変数（/var）はKPとKP権限の人だけが変更できます", true); return; }
     if (m) {
       await set(rp("meta/vars/" + assetKey(m[1])), m[2] === "" ? "　" : m[2]);
       await postSystem("ルーム変数 " + m[1] + " を「" + m[2] + "」にしました");
@@ -701,7 +757,7 @@ function queueRender() {
 
 function boardObjects() {
   const list = [];
-  Object.entries(S.items).forEach(([id, o]) => { if (o.visible !== false) list.push({ kind: "items", id, o }); });
+  Object.entries(S.items).forEach(([id, o]) => { if (o.visible !== false || S.isKP) list.push({ kind: "items", id, o }); });
   Object.entries(S.markers).forEach(([id, o]) => list.push({ kind: "markers", id, o }));
   Object.entries(S.chars).forEach(([id, o]) => { if (o.active !== false && visibleChar(o)) list.push({ kind: "chars", id, o }); });
   return list;
@@ -758,6 +814,19 @@ function drawObject({ kind, id, o }) {
     node.append(img);
     if (kind === "chars") node.append(el("div", "face-fallback"), el("div", "label"), el("div", "bars"));
     bindPointer(node);
+    node.addEventListener("contextmenu", (e) => {
+      const { kind: k, id: oid } = node.dataset;
+      if (k === "chars") {
+        e.preventDefault();
+        S.selChar = oid;
+        showTab("chars");
+        renderCharList();
+        renderCharDetail();
+      } else if (S.isKP) {
+        e.preventDefault();
+        selectObj(k, oid);
+      }
+    });
     $("board").append(node);
     S.nodes.set(key, node);
   }
@@ -768,6 +837,7 @@ function drawObject({ kind, id, o }) {
   node.style.zIndex = String(cssZ(o.z, kind === "chars" && isStand(o)));
   node.classList.toggle("locked", !!o.locked);
   node.classList.toggle("stand", kind === "chars" && isStand(o));
+  node.classList.toggle("hidden-obj", kind === "items" && o.visible === false);
   node.classList.toggle("kp-only", kind === "chars" && !!o.kpOnly);
   node.classList.toggle("clickable", !!o.click);
   node.title = kind === "markers" ? (o.text || "") : (o.memo || "");
@@ -815,7 +885,7 @@ function bindPointer(node) {
     ox = o.x; oy = o.y;
     sl = wrap.scrollLeft; st = wrap.scrollTop;
     node.setPointerCapture(e.pointerId);
-    if (o.locked) {
+    if (o.locked || (kind !== "chars" && !S.isKP)) {
       mode = e.pointerType === "touch" ? "" : "pan";
       if (mode) wrap.classList.add("panning");
     } else {
@@ -903,18 +973,238 @@ function renderScenes() {
   });
 }
 
+function noteColor(n, i) {
+  const c = parseInt(n.color, 10);
+  return c >= 1 && c <= 4 ? c : (i % 4) + 1;
+}
+
 function renderNotes() {
   const box = $("noteList");
+  const ae = document.activeElement;
+  if (ae && box.contains(ae) && ae.matches("input, textarea, select")) return;
+  const open = new Set([...box.querySelectorAll("details[open]")].map((d) => d.dataset.id));
   box.replaceChildren();
   const entries = sorted(S.notes, "order");
-  if (!entries.length) box.append(el("p", "msg", "メモはまだありません"));
-  entries.forEach(([, n], i) => {
-    const d = el("details", "note acc-color-" + ((i % 4) + 1));
+  if (!entries.length) box.append(el("p", "msg", "テキストはまだありません（room.zip のメモもここに入ります）"));
+  entries.forEach(([id, n], i) => {
+    const d = el("details", "note acc-color-" + noteColor(n, i));
+    d.dataset.id = id;
+    if (open.has(id)) d.open = true;
     d.append(el("summary", "", n.name || "（無題）"));
-    const pre = el("div", "note-text", n.text || "");
-    d.append(pre);
+    const title = el("input");
+    title.value = n.name || "";
+    title.placeholder = "見出し";
+    title.addEventListener("change", () => update(rp("notes/" + id), { name: title.value.slice(0, 100) }));
+    const color = el("select");
+    ["青", "緑", "橙", "紫"].forEach((lab, k) => { const o = el("option", "", lab); o.value = String(k + 1); color.append(o); });
+    color.value = String(noteColor(n, i));
+    color.addEventListener("change", () => update(rp("notes/" + id), { color: parseInt(color.value, 10) }));
+    const text = el("textarea", "note-edit");
+    text.rows = 8;
+    text.value = n.text || "";
+    text.addEventListener("change", () => update(rp("notes/" + id), { text: text.value }));
+    const up = el("button", "mini", "↑");
+    up.type = "button";
+    up.disabled = i === 0;
+    up.addEventListener("click", () => {
+      const prev = entries[i - 1];
+      update(rp("notes"), { [id + "/order"]: prev[1].order ?? i - 1, [prev[0] + "/order"]: n.order ?? i });
+    });
+    const del = el("button", "mini del", "削除");
+    del.type = "button";
+    del.addEventListener("click", () => { if (confirm("「" + (n.name || "無題") + "」を削除しますか？")) remove(rp("notes/" + id)); });
+    const row = el("div", "row");
+    row.append(title, color, up, del);
+    d.append(row, text);
     box.append(d);
   });
+}
+
+function addNote() {
+  const max = Object.values(S.notes).reduce((m, n) => Math.max(m, +n.order || 0), 0);
+  push(rp("notes"), { name: "新しいテキスト", text: "", color: 1, order: max + 1 }).then((r) => {
+    renderNotes();
+    const d = $("noteList").querySelector("details[data-id='" + r.key + "']");
+    if (d) d.open = true;
+  });
+}
+
+function imagePicker(box, cur, onPick) {
+  const wasOpen = !!box.querySelector("details[open]");
+  box.replaceChildren();
+  const head = el("div", "pick-head");
+  const th = el("img", "thumb");
+  th.alt = "";
+  th.dataset.asset = cur || "";
+  th.src = src(cur);
+  th.hidden = !cur;
+  head.append(th, el("span", "msg", cur ? "" : "画像なし"));
+  const up = el("label", "file-btn", "アップロード");
+  const fi = el("input");
+  fi.type = "file";
+  fi.accept = "image/*";
+  fi.addEventListener("change", async () => {
+    const f = fi.files[0];
+    if (!f) return;
+    try { onPick(await uploadAsset(f, 1600)); } catch (e) { setStatus("アップロードに失敗しました: " + e.message, true); }
+  });
+  up.append(fi);
+  const none = el("button", "mini", "画像なし");
+  none.type = "button";
+  none.addEventListener("click", () => onPick(""));
+  head.append(up, none);
+  const d = el("details", "pick-list");
+  d.append(el("summary", "", "部屋の画像から選ぶ（" + S.assets.size + "枚）"));
+  const grid = el("div", "pick-grid");
+  const fill = () => {
+    if (grid.childElementCount) return;
+    [...S.assets.keys()].forEach((k) => {
+      const b = el("button", "pick-item" + (k === cur ? " on" : ""));
+      b.type = "button";
+      const im = el("img");
+      im.alt = "";
+      im.loading = "lazy";
+      im.src = src(k);
+      b.append(im);
+      b.addEventListener("click", () => onPick(k));
+      grid.append(b);
+    });
+  };
+  d.addEventListener("toggle", () => { if (d.open) fill(); });
+  d.append(grid);
+  if (wasOpen) { d.open = true; fill(); }
+  box.append(head, d);
+}
+
+function renderBoardPickers() {
+  if (!S.isKP) return;
+  const b = S.meta.board || {};
+  imagePicker($("bgPick"), b.bg || "", (k) => set(rp("meta/board/bg"), k || null));
+  imagePicker($("fgPick"), b.fg || "", (k) => set(rp("meta/board/fg"), k || null));
+}
+
+const OBJ_FIELDS = {
+  items: [["memo", "名前（メモ）", "text"], ["x", "X", "num"], ["y", "Y", "num"], ["w", "幅", "num"], ["h", "高さ", "num"], ["z", "レイヤー", "z"], ["click", "クリックアクション（クリックで発言する文字）", "area"], ["locked", "固定（動かせなくする）", "check"], ["visible", "表示する", "check"]],
+  markers: [["text", "文字", "area"], ["x", "X", "num"], ["y", "Y", "num"], ["w", "幅", "num"], ["h", "高さ", "num"], ["z", "レイヤー", "z"], ["click", "クリックアクション（クリックで発言する文字）", "area"], ["locked", "固定（動かせなくする）", "check"]]
+};
+
+function objLabel(kind, o) {
+  const t = kind === "items" ? o.memo || o.click : o.text || o.click;
+  return String(t || "（名前なし）").split("\n")[0].slice(0, 30);
+}
+
+function renderObjLists() {
+  if (!S.isKP) return;
+  [["items", "itemList", "selItem"], ["markers", "markerList", "selMarker"]].forEach(([kind, listId, selKey]) => {
+    const list = $(listId);
+    list.replaceChildren();
+    Object.entries(S[kind]).sort((a, b) => (+b[1].z || 0) - (+a[1].z || 0)).forEach(([id, o]) => {
+      const li = el("li", id === S[selKey] ? "current" : "");
+      const th = el("img", "thumb");
+      th.alt = "";
+      th.dataset.asset = o.img || "";
+      th.src = src(o.img);
+      th.hidden = !th.src;
+      const tags = (o.locked ? "（固定）" : "") + (o.visible === false ? "（非表示）" : "");
+      li.append(th, el("span", "", objLabel(kind, o) + tags), el("span", "z-tag", "L" + Math.round(+o.z || 0)));
+      li.addEventListener("click", () => { S[selKey] = id === S[selKey] ? "" : id; renderObjLists(); renderObjEditor(kind, true); });
+      list.append(li);
+    });
+    if (!list.childElementCount) list.append(el("li", "empty", "まだありません"));
+  });
+  renderObjEditor("items");
+  renderObjEditor("markers");
+}
+
+function renderObjEditor(kind, force) {
+  const box = $(kind === "items" ? "itemEditor" : "markerEditor");
+  const id = kind === "items" ? S.selItem : S.selMarker;
+  const o = S[kind][id];
+  box.hidden = !o;
+  if (!o) { box.replaceChildren(); box.dataset.id = ""; return; }
+  const ae = document.activeElement;
+  if (!force && box.dataset.id === id && ae && box.contains(ae) && ae.matches("input, textarea, select")) return;
+  box.dataset.id = id;
+  box.replaceChildren();
+  const save = (patch) => update(rp(kind + "/" + id), patch).catch((e) => setStatus("保存失敗: " + e.message, true));
+  const pick = el("div", "img-pick");
+  imagePicker(pick, o.img || "", (k) => save({ img: k }));
+  const f0 = el("div", "field");
+  f0.append(el("span", "", "画像"), pick);
+  box.append(f0);
+  const grid = el("div", "obj-grid");
+  OBJ_FIELDS[kind].forEach(([key, label, type]) => {
+    if (type === "check") {
+      const lab = el("label", "check");
+      const cb = el("input");
+      cb.type = "checkbox";
+      cb.checked = key === "visible" ? o.visible !== false : !!o[key];
+      cb.addEventListener("change", () => save({ [key]: cb.checked }));
+      lab.append(cb, document.createTextNode(label));
+      box.append(lab);
+      return;
+    }
+    const lab = el("label", "field" + (type === "num" || type === "z" ? " small" : ""));
+    lab.append(el("span", "", label));
+    const inp = el(type === "area" ? "textarea" : "input");
+    if (type === "area") inp.rows = 2;
+    if (type === "num" || type === "z") { inp.type = "number"; inp.inputMode = "numeric"; }
+    if (type === "z") { inp.min = "-100"; inp.max = "999"; lab.title = "-100〜999（大きいほど上。前景は1、駒は100〜200）"; }
+    inp.value = o[key] ?? (type === "z" || type === "num" ? 0 : "");
+    inp.addEventListener("change", () => {
+      let v = inp.value;
+      if (type === "num") v = Math.round(+v || 0);
+      if (key === "w" || key === "h") v = Math.max(1, Math.min(200, v));
+      if (type === "z") v = Math.max(-100, Math.min(999, Math.round(+v || 0)));
+      if (type === "num" || type === "z") inp.value = v;
+      save({ [key]: v });
+    });
+    lab.append(inp);
+    (type === "num" || type === "z" ? grid : box).append(lab);
+  });
+  box.insertBefore(grid, box.children[1]);
+  const row = el("div", "row wrap");
+  const center = el("button", "", "盤面の中央へ");
+  center.type = "button";
+  center.addEventListener("click", () => save(centerPos(o.w || 1, o.h || 1)));
+  const dup = el("button", "", "複製");
+  dup.type = "button";
+  dup.addEventListener("click", async () => {
+    const r = await push(rp(kind), { ...o, x: (o.x || 0) + 1, y: (o.y || 0) + 1 });
+    if (kind === "items") S.selItem = r.key; else S.selMarker = r.key;
+    renderObjLists();
+  });
+  const del = el("button", "del", "削除");
+  del.type = "button";
+  del.addEventListener("click", () => {
+    if (!confirm("「" + objLabel(kind, o) + "」を削除しますか？")) return;
+    remove(rp(kind + "/" + id));
+    if (kind === "items") S.selItem = ""; else S.selMarker = "";
+  });
+  row.append(center, dup, del);
+  box.append(row);
+}
+
+async function addObj(kind) {
+  const base = { ...centerPos(8, 6), w: 8, h: 6, z: 50, img: "", click: "", locked: false };
+  const o = kind === "items" ? { ...base, type: "object", memo: "新しいパネル", visible: true } : { ...base, text: "新しいマーカー" };
+  const r = await push(rp(kind), o);
+  if (kind === "items") S.selItem = r.key; else S.selMarker = r.key;
+  renderObjLists();
+  renderObjEditor(kind, true);
+}
+
+function selectObj(kind, id) {
+  if (!S.isKP) return;
+  if (!S.kpOpen) { S.kpOpen = true; applyKpLayout(); }
+  showTab("room");
+  const box = $(kind === "items" ? "itemEditor" : "markerEditor");
+  const d = box.closest("details");
+  if (d) d.open = true;
+  if (kind === "items") S.selItem = id; else S.selMarker = id;
+  renderObjLists();
+  renderObjEditor(kind, true);
+  box.scrollIntoView({ block: "nearest" });
 }
 
 function renderVars() {
@@ -1176,12 +1466,15 @@ function renderCharList() {
     const tags = (isStand(c) ? "（立ち絵）" : "") + who + (c.kpOnly ? "（KPのみ）" : "") + (c.locked ? "（固定）" : "");
     const name = el("span", "", (c.name || "（名前なし）") + tags);
     const off = c.active === false;
-    const tg = el("button", "mini" + (off ? " primary" : ""), off ? "戻す" : "下げる");
-    tg.type = "button";
-    tg.title = off ? "盤面に戻す" : "盤面から下げる";
-    tg.addEventListener("click", (e) => { e.stopPropagation(); update(rp("chars/" + id), { active: off }); });
     li.classList.toggle("off", off);
-    li.append(th, name, tg);
+    li.append(th, name);
+    if (canEdit(c)) {
+      const tg = el("button", "mini" + (off ? " primary" : ""), off ? "戻す" : "下げる");
+      tg.type = "button";
+      tg.title = off ? "盤面に戻す" : "盤面から下げる";
+      tg.addEventListener("click", (e) => { e.stopPropagation(); update(rp("chars/" + id), { active: off }); });
+      li.append(tg);
+    }
     li.addEventListener("click", () => { S.selChar = id; renderCharList(); renderCharDetail(); });
     list.append(li);
   });
@@ -1193,12 +1486,19 @@ function renderCharDetail() {
   if (!c) return;
   const stand = isStand(c);
   const seeSt = canSeeStatus(c);
+  const edit = canEdit(c);
+  document.querySelectorAll("#charDetail input, #charDetail select, #charDetail textarea, #charDetail .st button, #cdAddStatus, #cdAddParam").forEach((n) => {
+    if (!n.closest(".dup")) n.disabled = !edit;
+  });
+  $("cdDelete").hidden = !edit;
+  $("cdReadonly").hidden = edit;
   document.querySelectorAll("#charDetail .char-only").forEach((n) => { n.hidden = stand; });
   document.querySelectorAll("#charDetail .kp-only-ui").forEach((n) => { n.hidden = !S.isKP; });
   $("cdStatusBox").hidden = stand || !seeSt;
   $("cdHiddenNote").hidden = stand || seeSt;
   const parent = stand && c.parent ? S.chars[c.parent] : null;
   $("cdParent").hidden = !stand;
+  $("cdSpeak").hidden = stand || !edit;
   $("cdParent").textContent = parent ? "「" + (parent.name || "") + "」の発言で表情が切り替わります" : "元のキャラ駒が見つかりません（表情は切り替わりません）";
   $("cdLock").checked = !!c.locked;
   const os = $("cdOwner");
@@ -1261,6 +1561,7 @@ function renderCharDetail() {
     im.dataset.asset = fc.key || "";
     im.src = src(fc.key);
     b.append(im, el("span", "", fc.label || "-"));
+    b.disabled = !canEdit(S.chars[faceOwner]);
     b.addEventListener("click", () => update(rp("chars/" + faceOwner), { face: fc.label || null }));
     faces.append(b);
   });
@@ -1412,15 +1713,6 @@ function initRoomTab() {
   $("zipFile").addEventListener("change", importZip);
   $("fieldMult").addEventListener("change", () => set(rp("meta/fieldMult"), parseInt($("fieldMult").value, 10)).then(() => { S.fitted = false; queueRender(); }));
   $("gridShow").addEventListener("change", () => set(rp("meta/board/displayGrid"), $("gridShow").checked));
-  const img = (id, key) => $(id).addEventListener("change", async () => {
-    const f = $(id).files[0];
-    if (!f) return;
-    const k = await uploadAsset(f, 1600);
-    await set(rp("meta/board/" + key), k);
-    $(id).value = "";
-  });
-  img("bgFile", "bg");
-  img("fgFile", "fg");
   $("kpClaim").addEventListener("click", async () => {
     if (S.meta.owner) return;
     if (!confirm("この部屋のKPになりますか？（あとから変更はできません）")) return;
@@ -1428,14 +1720,10 @@ function initRoomTab() {
     await postSystem(S.name + " がこの部屋のKPになりました");
   });
   $("assetsDelAll").addEventListener("click", deleteRoomAssets);
+  $("noteAdd").addEventListener("click", addNote);
+  $("itemAdd").addEventListener("click", () => addObj("items"));
+  $("markerAdd").addEventListener("click", () => addObj("markers"));
   $("roomDelete").addEventListener("click", deleteRoom);
-}
-
-function renderRoomAdmin() {
-  const hasOwner = !!S.meta.owner;
-  $("kpClaimBox").hidden = hasOwner;
-  $("kpAdmin").hidden = !S.isKP;
-  $("kpBadge").hidden = !S.isKP;
 }
 
 async function deleteRoomAssets() {
@@ -1455,7 +1743,7 @@ async function deleteRoomAssets() {
 }
 
 async function deleteRoom() {
-  if (!S.isKP) return;
+  if (!S.isOwner) return;
   const typed = prompt("部屋そのものを削除します。チャットのログ・駒・画像・シーンがすべて消え、元に戻せません。\n削除するなら部屋ID「" + S.roomId + "」を入力してください");
   if (typed === null) return;
   if (typed.trim() !== S.roomId) { $("adminMsg").textContent = "部屋IDが違うため削除しませんでした"; return; }
@@ -1467,6 +1755,11 @@ async function deleteRoom() {
   } catch (e) {
     $("adminMsg").textContent = "削除に失敗しました（ルールが古い可能性があります）: " + e.message;
   }
+}
+
+function queueAssetUi() {
+  clearTimeout(S.assetUiT);
+  S.assetUiT = setTimeout(() => { renderBoardPickers(); renderObjLists(); }, 300);
 }
 
 function updateAssetInfo() {
