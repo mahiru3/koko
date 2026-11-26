@@ -1,6 +1,6 @@
-import { onChildChanged, onChildRemoved, ref, set, update, remove, push, onValue, onChildAdded, query, limitToLast } from "./51-session-fb.js?v=4j";
-import { S, LOG_LIMIT, el, newKey, setStatus } from "./51-session-core.js?v=4j";
-import { chansChanged, renderMessage, rerenderLog, postSystem, tabName, msgChanged, msgRemoved } from "./51-session-chat.js?v=4j";
+import { onChildChanged, onChildRemoved, ref, set, update, remove, push, onValue, onChildAdded, query, limitToLast } from "./51-session-fb.js?v=4k";
+import { S, LOG_LIMIT, el, newKey, setStatus } from "./51-session-core.js?v=4k";
+import { chansChanged, renderMessage, rerenderLog, postSystem, tabName, msgChanged, msgRemoved } from "./51-session-chat.js?v=4k";
 
 export function sp(path) {
   return ref(S.db, "secrets/" + S.roomId + (path ? "/" + path : ""));

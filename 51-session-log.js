@@ -1,7 +1,7 @@
-import { ref, get } from "./51-session-fb.js?v=4j";
-import { S, $, el, rp, setStatus } from "./51-session-core.js?v=4j";
-import { colKeys, tabName } from "./51-session-chat.js?v=4j";
-import { sp, isSecret } from "./51-session-secret.js?v=4j";
+import { ref, get } from "./51-session-fb.js?v=4k";
+import { S, $, el, rp, setStatus } from "./51-session-core.js?v=4k";
+import { colKeys, tabName } from "./51-session-chat.js?v=4k";
+import { sp, isSecret } from "./51-session-secret.js?v=4k";
 
 const CCF_ID = { main: "main", info: "info", talk: "other" };
 const CCF_JA = { main: "メイン", info: "情報", talk: "雑談" };

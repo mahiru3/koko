@@ -1,7 +1,7 @@
-import { update } from "./51-session-fb.js?v=4j";
-import { parseTekeyJson, renderPalette, moveLine } from "./51-session-palette.js?v=4j";
-import { $, S, canEdit, el, setStatus, newKey, faceList, charIcon, src, rp, isPc, speakerChar, charByName } from "./51-session-core.js?v=4j";
-import { isChan, colKeys, buildChatTabs, paintTab, tabName, sendChat, tabLabel, tabColor } from "./51-session-chat.js?v=4j";
+import { update } from "./51-session-fb.js?v=4k";
+import { parseTekeyJson, renderPalette, moveLine } from "./51-session-palette.js?v=4k";
+import { $, S, canEdit, el, setStatus, newKey, faceList, charIcon, src, rp, isPc, speakerChar, charByName } from "./51-session-core.js?v=4k";
+import { isChan, colKeys, buildChatTabs, paintTab, tabName, sendChat, tabLabel, tabColor } from "./51-session-chat.js?v=4k";
 
 export function buildPlaceOptions() {
   const box = $("palPlaceBtns");

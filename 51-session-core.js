@@ -1,7 +1,7 @@
-import { ref, onValue } from "./51-session-fb.js?v=4j";
-import { renderSpeaker } from "./51-session-chat.js?v=4j";
-import { queueRender } from "./51-session-board.js?v=4j";
-import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4j";
+import { ref, onValue } from "./51-session-fb.js?v=4k";
+import { renderSpeaker } from "./51-session-chat.js?v=4k";
+import { queueRender } from "./51-session-board.js?v=4k";
+import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4k";
 
 export const $ = (id) => document.getElementById(id);
 
@@ -34,6 +34,7 @@ export const S = {
   speaker: "", selChar: "", palettes: [], palSel: "",
   pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false,
   isKP: false, isOwner: false, kpOpen: true, selItem: "", selMarker: "", off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {},
+  kp: {}, kpLoaded: false, kpOff: null, tagView: "", assetView: "*", foldersMade: false,
   chatTab: "main", msgs: [], unread: {}, popReady: false, bonus: null, palPlace: {}, palPick: -1, palClosed: new Set(), cbOrder: [], wins: {}, winZ: 60, colOrder: [], popPc: false
 };
 

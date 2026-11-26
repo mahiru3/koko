@@ -1,12 +1,12 @@
-import { onChildChanged, onChildRemoved, ref, remove, push, set, update, onValue, onChildAdded, query, limitToLast, serverTimestamp } from "./51-session-fb.js?v=4j";
-import { expandVars } from "./51-session-palette.js?v=4j";
-import { assetKey, normLabel } from "./51-session-import.js?v=4j";
-import { $, LOG_LIMIT, CH_TABS, CHECK_RE, S, visibleChar, isStand, canEdit, el, setStatus, faceList, charIcon, src, rp, sorted, isPc, speakerChar } from "./51-session-core.js?v=4j";
-import { showTab } from "./51-session-layout.js?v=4j";
-import { queueRender } from "./51-session-board.js?v=4j";
-import { buildPlaceOptions, renderPalFace, renderPaletteTabs, setPalPlace, renderPalDest } from "./51-session-pal.js?v=4j";
-import { renderChanList, addChan, renameChan, deleteChan, applyScene } from "./51-session-kp.js?v=4j";
-import { addSecretChan, initSecrets, isOpen, isSecret, openSdice, sdiceOf, secretList, sendSecretDice, watchSdice } from "./51-session-secret.js?v=4j";
+import { onChildChanged, onChildRemoved, ref, remove, push, set, update, onValue, onChildAdded, query, limitToLast, serverTimestamp } from "./51-session-fb.js?v=4k";
+import { expandVars } from "./51-session-palette.js?v=4k";
+import { assetKey, normLabel } from "./51-session-import.js?v=4k";
+import { $, LOG_LIMIT, CH_TABS, CHECK_RE, S, visibleChar, isStand, canEdit, el, setStatus, faceList, charIcon, src, rp, sorted, isPc, speakerChar } from "./51-session-core.js?v=4k";
+import { showTab } from "./51-session-layout.js?v=4k";
+import { queueRender } from "./51-session-board.js?v=4k";
+import { buildPlaceOptions, renderPalFace, renderPaletteTabs, setPalPlace, renderPalDest } from "./51-session-pal.js?v=4k";
+import { renderChanList, addChan, renameChan, deleteChan, applyScene } from "./51-session-kp.js?v=4k";
+import { addSecretChan, initSecrets, isOpen, isSecret, openSdice, sdiceOf, secretList, sendSecretDice, watchSdice } from "./51-session-secret.js?v=4k";
 
 export function lookupVars(c) {
   const v = {};

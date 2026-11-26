@@ -1,5 +1,5 @@
 {
-  // koko rules v4i 2026-11-26
+  // koko rules v4k 2026-11-26
   "rules": {
     "rooms": {
       "$room": {
@@ -118,6 +118,12 @@
             ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 2000 && newData.child('dice').isString() && newData.child('dice').val().length <= 2000"
           }
         }
+      }
+    },
+    "kpdata": {
+      "$room": {
+        ".read": "(auth != null && root.child('links/' + auth.uid + '/pid').exists() && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))",
+        ".write": "(auth != null && root.child('links/' + auth.uid + '/pid').exists() && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
       }
     },
     "profileCodes": {

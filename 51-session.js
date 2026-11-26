@@ -1,15 +1,15 @@
-import { firebaseConfig } from "./51-session-config.js?v=4j";
-import { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, getDatabase, ref, set, update, remove, onValue, onChildAdded, onChildRemoved, serverTimestamp, onDisconnect, connectDatabaseEmulator } from "./51-session-fb.js?v=4j";
-import { ensureProfile } from "./51-session-id.js?v=4j";
-import { $, params, ROOM_RE, S, applyTheme, kpCheck, el, setStatus, randomId, rp, syncMarkers } from "./51-session-core.js?v=4j";
-import { initTabs, initKeep, initWindows, applyKpLayout } from "./51-session-layout.js?v=4j";
-import { initChat, chansChanged, ctBonus, renderBonus, renderSpeaker, rerenderLog } from "./51-session-chat.js?v=4j";
-import { initBoard, queueRender } from "./51-session-board.js?v=4j";
-import { initPalettes, renderPaletteTabs } from "./51-session-pal.js?v=4j";
-import { initChars, initPaste, renderCharList, renderCharDetail } from "./51-session-chars.js?v=4j";
-import { renderPlayers, renderScenes, renderNotes, renderBoardPickers, renderObjLists, renderVars, initRoomTab, queueAssetUi, updateAssetInfo } from "./51-session-kp.js?v=4j";
-import { secretsForRole, syncOpened } from "./51-session-secret.js?v=4j";
-import { initLog } from "./51-session-log.js?v=4j";
+import { firebaseConfig } from "./51-session-config.js?v=4k";
+import { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, getDatabase, ref, set, update, remove, onValue, onChildAdded, onChildRemoved, serverTimestamp, onDisconnect, connectDatabaseEmulator } from "./51-session-fb.js?v=4k";
+import { ensureProfile } from "./51-session-id.js?v=4k";
+import { $, params, ROOM_RE, S, applyTheme, kpCheck, el, setStatus, randomId, rp, syncMarkers } from "./51-session-core.js?v=4k";
+import { initTabs, initKeep, initWindows, applyKpLayout } from "./51-session-layout.js?v=4k";
+import { initChat, chansChanged, ctBonus, renderBonus, renderSpeaker, rerenderLog } from "./51-session-chat.js?v=4k";
+import { initBoard, queueRender } from "./51-session-board.js?v=4k";
+import { initPalettes, renderPaletteTabs } from "./51-session-pal.js?v=4k";
+import { initChars, initPaste, renderCharList, renderCharDetail } from "./51-session-chars.js?v=4k";
+import { renderPlayers, renderScenes, renderNotes, renderBoardPickers, renderObjLists, renderVars, initRoomTab, queueAssetUi, updateAssetInfo, watchKpData } from "./51-session-kp.js?v=4k";
+import { secretsForRole, syncOpened } from "./51-session-secret.js?v=4k";
+import { initLog } from "./51-session-log.js?v=4k";
 
 function initJoin() {
   $("joinRoom").value = params.get("room") || "";
@@ -103,6 +103,7 @@ async function startRoom() {
     S.isOwner = !!S.pid && S.meta.owner === S.pid;
     if (kp !== S.isKP) { S.isKP = kp; renderCharList(); renderSpeaker(); renderCharDetail(); rerenderLog(); }
     if (S.sSrc) { secretsForRole(); syncOpened(); }
+    watchKpData();
     renderPlayers();
     applyKpLayout();
     syncMarkers();
