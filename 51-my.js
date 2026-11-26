@@ -1,10 +1,10 @@
-import { firebaseConfig } from "./51-session-config.js?v=4f";
+import { firebaseConfig } from "./51-session-config.js?v=4g";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
-  getDatabase, ref, push, set, update, remove, onValue, serverTimestamp, connectDatabaseEmulator
-} from "./51-session-fb.js?v=4f";
-import { ensureProfile, applyTransfer, transferCode, rand } from "./51-session-id.js?v=4f";
-import { compressImage } from "./51-session-import.js?v=4f";
+  getDatabase, ref, push, update, onValue, serverTimestamp, connectDatabaseEmulator
+} from "./51-session-fb.js?v=4g";
+import { ensureProfile, applyTransfer, transferCode, rand } from "./51-session-id.js?v=4g";
+import { compressImage } from "./51-session-import.js?v=4g";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -56,7 +56,7 @@ async function start() {
 function bind() {
   $("codeCopy").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText($("codeShow").value); $("codeMsg").textContent = "コピーしました"; }
-    catch (e) { $("codeShow").select(); }
+    catch { $("codeShow").select(); }
   });
   $("codeApply").addEventListener("click", async () => {
     if (!confirm("このブラウザの画像置き場を、入力したコードのものに切り替えますか？")) return;

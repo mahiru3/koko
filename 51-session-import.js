@@ -88,7 +88,7 @@ export async function readRoomZip(file, onProgress) {
     try {
       const buf = await zip.file(n).async("uint8array");
       assets[assetKey(n)] = await compressImage(buf, res[n].type || "image/png");
-    } catch (err) {
+    } catch {
       onProgress("読めない画像を飛ばしました: " + n);
     }
   }
@@ -174,7 +174,7 @@ function looseParse(text) {
   const t = String(text).trim().replace(/^\uFEFF/, "");
   try {
     return JSON.parse(t);
-  } catch (e) {
+  } catch {
     return JSON.parse(t.replace(/\r?\n/g, "\\n"));
   }
 }

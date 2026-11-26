@@ -1,4 +1,4 @@
-import { ref, set } from "./51-session-fb.js?v=4f";
+import { ref, set } from "./51-session-fb.js?v=4g";
 
 const CH = "abcdefghijkmnpqrstuvwxyz23456789";
 
@@ -23,7 +23,7 @@ export async function ensureProfile(db, uid) {
     try {
       await set(ref(db, "links/" + uid), { pid, code });
       return { pid, code };
-    } catch (e) {
+    } catch {
       localStorage.removeItem("s51-pid");
       localStorage.removeItem("s51-code");
     }
@@ -41,7 +41,7 @@ export async function applyTransfer(db, uid, text) {
   if (!m) throw new Error("コードの形が正しくありません");
   try {
     await set(ref(db, "links/" + uid), { pid: m[1], code: m[2] });
-  } catch (e) {
+  } catch {
     throw new Error("コードが違うようです");
   }
   save(m[1], m[2]);

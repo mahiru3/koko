@@ -1,297 +1,297 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>koko</title>
-<link rel="stylesheet" href="51-session.css?v=4f">
-<script src="51-session-bcdice.js?v=4f"></script>
-<script src="51-session-jszip.js?v=4f"></script>
-<script type="module" src="51-session.js?v=4f"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>koko</title>
+  <link rel="stylesheet" href="51-session.css?v=4g">
+  <script src="51-session-bcdice.js?v=4g"></script>
+  <script src="51-session-jszip.js?v=4g"></script>
+  <script type="module" src="51-session.js?v=4g"></script>
 </head>
 <body>
-<p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
-<section id="join" class="join">
-  <h1>koko</h1>
-  <label class="field">部屋ID
-    <span class="row"><input id="joinRoom" autocomplete="off" spellcheck="false" placeholder="招待URLなら自動入力"><button id="newRoom" type="button">新規作成</button></span>
-  </label>
-  <label class="field">名前<input id="joinName" maxlength="30" autocomplete="nickname"></label>
-  <label class="field">色<input id="joinColor" type="color" value="#4a90d9"></label>
-  <button id="joinBtn" type="button" class="primary">入室</button>
-  <p id="joinMsg" class="msg"></p>
-</section>
-
-<main id="room" class="room" hidden>
-  <header class="bar">
-    <span id="roomLabel" class="room-label"></span>
-    <button id="kpToggle" type="button" class="kp-toggle" hidden>KPパレット</button>
-    <button id="kpClaim" type="button" class="primary" hidden>この部屋のKPになる</button>
-    <select id="systemSel" title="ダイスシステム（KPが変更）"></select>
-    <button id="copyUrl" type="button">招待URL</button>
-    <a class="btn-link" href="my.html" target="_blank" rel="noopener">マイ画像</a>
-    <span class="zoom">
-      <button id="zoomOut" type="button">−</button>
-      <span id="zoomLabel">100%</span>
-      <button id="zoomIn" type="button">＋</button>
-      <button id="zoomFit" type="button">全体</button>
-    </span>
-    <span id="memberCount" class="count"></span>
-    <span id="status" class="status"></span>
-    <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
-    <button id="themeBtn" type="button" class="theme-btn">ライト</button>
-    <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-    <span class="ver">v4f</span>
-  </header>
-
-  <section id="boardWrap" class="board-wrap">
-    <div id="sizer" class="sizer" title="ホイールで拡大縮小・何もない所をドラッグで移動・Ctrl+Vで駒を貼り付け">
-      <div id="board" class="board">
-        <div id="field" class="field-rect"></div>
-      </div>
-    </div>
-  </section>
-  <div id="popups" class="popups"></div>
-  <section id="chatDock" class="chat-dock">
-    <div id="chatSplit" class="chat-split" title="ドラッグで高さを変える"></div>
-    <div id="chatWin" class="chat-win">
-      <div class="chat-win-top">
-        <nav id="chatTabs" class="chat-tabs"></nav>
-        <button id="chanAdd" type="button" class="mini" title="タブを追加（KP）" hidden>＋</button>
-        <label class="check pc-only pop-opt" title="PCで盤面左下に新着発言を出す"><input id="popToggle" type="checkbox">新着ポップアップ</label>
-      </div>
-      <ol id="log" class="log"></ol>
-      <div class="chat-tools">
-        <label class="tool">名前<select id="chatWho"></select></label>
-        <label class="tool">表情<select id="chatFace"></select></label>
-        <label class="tool" title="発言の文字の色">文字色<input id="chatColor" type="color" value="#dddddd"></label>
-        <button id="chatColorReset" type="button" class="mini" title="文字色を元に戻す">元の色</button>
-        <span id="diceBtns" class="dice-btns"></span>
-      </div>
-      <div id="myStatus" class="my-status mobile-only" hidden></div>
-      <div id="chatBonus" class="bonus mobile-only"></div>
-      <div class="send">
-        <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
-        <button id="sendBtn" type="button" class="primary">送信</button>
-      </div>
-    </div>
+  <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
+  <section id="join" class="join">
+    <h1>koko</h1>
+    <label class="field">部屋ID
+      <span class="row"><input id="joinRoom" autocomplete="off" spellcheck="false" placeholder="招待URLなら自動入力"><button id="newRoom" type="button">新規作成</button></span>
+    </label>
+    <label class="field">名前<input id="joinName" maxlength="30" autocomplete="nickname"></label>
+    <label class="field">色<input id="joinColor" type="color" value="#4a90d9"></label>
+    <button id="joinBtn" type="button" class="primary">入室</button>
+    <p id="joinMsg" class="msg"></p>
   </section>
 
-  <aside id="kpSide" class="side kp-side" hidden>
-    <nav class="tabs">
-      <span class="grip" data-win="kp" title="ドラッグでウィンドウにして動かす">⠿</span>
-      <span class="tabs-title">KP</span>
-      <button type="button" data-tab="notes" class="on">テキスト</button>
-      <button type="button" data-tab="room">部屋</button>
-      <button type="button" data-tab="scenes">シーン</button>
-    </nav>
+  <main id="room" class="room" hidden>
+    <header class="bar">
+      <span id="roomLabel" class="room-label"></span>
+      <button id="kpToggle" type="button" class="kp-toggle" hidden>KPパレット</button>
+      <button id="kpClaim" type="button" class="primary" hidden>この部屋のKPになる</button>
+      <select id="systemSel" title="ダイスシステム（KPが変更）"></select>
+      <button id="copyUrl" type="button">招待URL</button>
+      <a class="btn-link" href="my.html" target="_blank" rel="noopener">マイ画像</a>
+      <span class="zoom">
+        <button id="zoomOut" type="button">−</button>
+        <span id="zoomLabel">100%</span>
+        <button id="zoomIn" type="button">＋</button>
+        <button id="zoomFit" type="button">全体</button>
+      </span>
+      <span id="memberCount" class="count"></span>
+      <span id="status" class="status"></span>
+      <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
+      <button id="themeBtn" type="button" class="theme-btn">ライト</button>
+      <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
+      <span class="ver">v4g</span>
+    </header>
 
-    <div id="tab-notes" class="panel">
-      <div class="row wrap">
-        <button id="noteAdd" type="button" class="primary">テキストを追加</button>
+    <section id="boardWrap" class="board-wrap">
+      <div id="sizer" class="sizer" title="ホイールで拡大縮小・何もない所をドラッグで移動・Ctrl+Vで駒を貼り付け">
+        <div id="board" class="board">
+          <div id="field" class="field-rect"></div>
+        </div>
       </div>
-      <div id="noteList" class="notes"></div>
-    </div>
+    </section>
+    <div id="popups" class="popups"></div>
+    <section id="chatDock" class="chat-dock">
+      <div id="chatSplit" class="chat-split" title="ドラッグで高さを変える"></div>
+      <div id="chatWin" class="chat-win">
+        <div class="chat-win-top">
+          <nav id="chatTabs" class="chat-tabs"></nav>
+          <button id="chanAdd" type="button" class="mini" title="タブを追加（KP）" hidden>＋</button>
+          <label class="check pc-only pop-opt" title="PCで盤面左下に新着発言を出す"><input id="popToggle" type="checkbox">新着ポップアップ</label>
+        </div>
+        <ol id="log" class="log"></ol>
+        <div class="chat-tools">
+          <label class="tool">名前<select id="chatWho"></select></label>
+          <label class="tool">表情<select id="chatFace"></select></label>
+          <label class="tool" title="発言の文字の色">文字色<input id="chatColor" type="color" value="#dddddd"></label>
+          <button id="chatColorReset" type="button" class="mini" title="文字色を元に戻す">元の色</button>
+          <span id="diceBtns" class="dice-btns"></span>
+        </div>
+        <div id="myStatus" class="my-status mobile-only" hidden></div>
+        <div id="chatBonus" class="bonus mobile-only"></div>
+        <div class="send">
+          <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
+          <button id="sendBtn" type="button" class="primary">送信</button>
+        </div>
+      </div>
+    </section>
 
-    <div id="tab-room" class="panel" hidden>
-      <details class="acc-color-2" open>
-        <summary>参加者（PL）</summary>
-        <ul id="memberList" class="mlist"></ul>
-      </details>
-      <details class="acc-color-1">
-        <summary>スクリーンパネル</summary>
+    <aside id="kpSide" class="side kp-side" hidden>
+      <nav class="tabs">
+        <span class="grip" data-win="kp" title="ドラッグでウィンドウにして動かす">⠿</span>
+        <span class="tabs-title">KP</span>
+        <button type="button" data-tab="room" class="on">部屋</button>
+        <button type="button" data-tab="items">スクパネ</button>
+        <button type="button" data-tab="notes">テキスト</button>
+        <button type="button" data-tab="scenes">シーン</button>
+      </nav>
+
+      <div id="tab-room" class="panel">
+        <details class="acc-color-2" open>
+          <summary>参加者（PL）</summary>
+          <ul id="memberList" class="mlist"></ul>
+        </details>
+        <details class="acc-color-3">
+          <summary>チャットのタブ</summary>
+          <ul id="chanList" class="mlist"></ul>
+          <div class="row wrap"><button id="chanAdd2" type="button">タブを追加</button></div>
+          <p class="msg">色はチャットウィンドウのタブと、PLパレットの発言場所のボタンに付きます</p>
+        </details>
+        <details class="acc-color-2">
+          <summary>CT使用（クリチケ）</summary>
+          <label class="field">「CT使用」で次の判定1回に足す値<input id="ctBonus" type="number" min="1" max="99" inputmode="numeric"></label>
+          <p class="msg">PLが「CT使用」を押すと、発言キャラのステータス「CT」が1減り、次のCCB判定の目標値にこの値が足されます</p>
+        </details>
+        <details class="acc-color-1">
+          <summary>ルーム変数</summary>
+          <ul id="varList" class="mlist"></ul>
+        </details>
+        <details class="acc-color-4">
+          <summary>部屋の管理</summary>
+          <div class="field">ココフォリアの room.zip を読み込む
+            <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
+            <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・テキストを置き換える</label>
+            <p id="zipMsg" class="msg"></p>
+          </div>
+          <div class="row wrap">
+            <button id="assetsDelAll" type="button" class="del">部屋の画像を全て削除</button>
+            <button id="roomDelete" type="button" class="del owner-only">部屋そのものを削除</button>
+          </div>
+          <p class="msg owner-note">部屋そのものの削除は、部屋を作ったKPだけができます</p>
+          <p id="adminMsg" class="msg"></p>
+        </details>
+        <p id="assetInfo" class="msg"></p>
+      </div>
+
+      <div id="tab-items" class="panel" hidden>
         <div class="row wrap"><button id="itemAdd" type="button" class="primary">パネルを追加</button></div>
         <ul id="itemList" class="plist compact"></ul>
         <div id="itemEditor" class="obj-editor" hidden></div>
-      </details>
-      <details class="acc-color-3">
-        <summary>マーカーパネル</summary>
-        <div class="row wrap"><button id="markerAdd" type="button" class="primary">マーカーを追加</button></div>
-        <ul id="markerList" class="plist compact"></ul>
-        <div id="markerEditor" class="obj-editor" hidden></div>
-      </details>
-      <details class="acc-color-4">
-        <summary>盤面（背景・前景）</summary>
-        <label class="field">盤面サイズ倍率
-          <select id="fieldMult">
-            <option value="1">×1</option>
-            <option value="2">×2</option>
-            <option value="4" selected>×4（ココフォリア相当）</option>
-          </select>
-        </label>
-        <label class="check"><input id="gridShow" type="checkbox">グリッドを表示</label>
-        <div class="field">背景<div id="bgPick" class="img-pick"></div></div>
-        <div class="field">前景（レイヤー1）<div id="fgPick" class="img-pick"></div></div>
-      </details>
-      <details class="acc-color-2">
-        <summary>CT使用（クリチケ）</summary>
-        <label class="field">「CT使用」で次の判定1回に足す値<input id="ctBonus" type="number" min="1" max="99" inputmode="numeric"></label>
-        <p class="msg">PLが「CT使用」を押すと、発言キャラのステータス「CT」が1減り、次のCCB判定の目標値にこの値が足されます</p>
-      </details>
-      <details class="acc-color-3">
-        <summary>チャットのタブ</summary>
-        <ul id="chanList" class="mlist"></ul>
-        <div class="row wrap"><button id="chanAdd2" type="button">タブを追加</button></div>
-        <p class="msg">色はチャットウィンドウのタブと、PLパレットの発言場所のボタンに付きます</p>
-      </details>
-      <details class="acc-color-1">
-        <summary>ルーム変数</summary>
-        <ul id="varList" class="mlist"></ul>
-      </details>
-      <details class="acc-color-4">
-        <summary>部屋の管理</summary>
-        <div class="field">ココフォリアの room.zip を読み込む
-          <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
-          <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・テキストを置き換える</label>
-          <p id="zipMsg" class="msg"></p>
-        </div>
+      </div>
+
+      <div id="tab-notes" class="panel" hidden>
         <div class="row wrap">
-          <button id="assetsDelAll" type="button" class="del">部屋の画像を全て削除</button>
-          <button id="roomDelete" type="button" class="del owner-only">部屋そのものを削除</button>
+          <button id="noteAdd" type="button" class="primary">テキストを追加</button>
         </div>
-        <p class="msg owner-note">部屋そのものの削除は、部屋を作ったKPだけができます</p>
-        <p id="adminMsg" class="msg"></p>
-      </details>
-      <p id="assetInfo" class="msg"></p>
-    </div>
+        <div id="noteList" class="notes"></div>
+      </div>
 
-    <div id="tab-scenes" class="panel" hidden>
-      <ul id="sceneList" class="plist"></ul>
-    </div>
-  </aside>
+      <div id="tab-scenes" class="panel" hidden>
+        <ul id="sceneList" class="plist"></ul>
+        <details class="acc-color-3" open>
+          <summary>マーカーパネル（今のシーン）</summary>
+          <p id="markerScene" class="msg"></p>
+          <div class="row wrap"><button id="markerAdd" type="button" class="primary">マーカーを追加</button></div>
+          <ul id="markerList" class="plist compact"></ul>
+          <div id="markerEditor" class="obj-editor" hidden></div>
+        </details>
+        <details class="acc-color-4">
+          <summary>盤面（背景・前景・今のシーン）</summary>
+          <label class="field">盤面サイズ倍率
+            <select id="fieldMult">
+              <option value="1">×1</option>
+              <option value="2">×2</option>
+              <option value="4" selected>×4（ココフォリア相当）</option>
+            </select>
+          </label>
+          <label class="check"><input id="gridShow" type="checkbox">グリッドを表示</label>
+          <div class="field">背景<div id="bgPick" class="img-pick"></div></div>
+          <div class="field">前景（レイヤー1）<div id="fgPick" class="img-pick"></div></div>
+        </details>
+      </div>
+    </aside>
 
-  <aside id="plSide" class="side pl-side">
-    <nav class="tabs">
-      <span class="grip" data-win="pl" title="ドラッグでウィンドウにして動かす">⠿</span>
-      <button type="button" data-tab="chat" class="on">チャット</button>
-      <button type="button" data-tab="palette">チャパレ</button>
-      <button type="button" data-tab="chars">キャラ</button>
-    </nav>
+    <aside id="plSide" class="side pl-side">
+      <nav class="tabs">
+        <span class="grip" data-win="pl" title="ドラッグでウィンドウにして動かす">⠿</span>
+        <button type="button" data-tab="chat" class="on">チャット</button>
+        <button type="button" data-tab="palette">チャパレ</button>
+        <button type="button" data-tab="chars">キャラ</button>
+      </nav>
 
-    <div id="tab-chat" class="panel"></div>
-    </div>
+      <div id="tab-chat" class="panel"></div>
 
-    <div id="tab-palette" class="panel" hidden>
-      <details class="pal-sec acc-color-2" data-keep="palchars" open>
-        <summary>キャラ</summary>
-        <div id="palChars" class="char-bar"></div>
-        <div id="palStatus" class="my-status" hidden></div>
-      </details>
-      <div class="pal-head">
-        <button id="palFace" type="button" class="pal-face" title="押すと表情（差分）を選べます"></button>
-        <div class="pal-place">
-          <span class="pal-place-title">発言場所</span>
-          <div id="palPlaceBtns" class="place-btns"></div>
+      <div id="tab-palette" class="panel" hidden>
+        <details class="pal-sec acc-color-2" data-keep="palchars" open>
+          <summary>キャラ</summary>
+          <div id="palChars" class="char-bar"></div>
+          <div id="palStatus" class="my-status" hidden></div>
+        </details>
+        <div class="pal-head">
+          <button id="palFace" type="button" class="pal-face" title="押すと表情（差分）を選べます"></button>
+          <div class="pal-place">
+            <span class="pal-place-title">発言場所</span>
+            <div id="palPlaceBtns" class="place-btns"></div>
+          </div>
+        </div>
+        <div id="palFaceList" class="faces pal-faces" hidden></div>
+        <div class="send">
+          <textarea id="palInput" rows="2" placeholder="行を選ぶとここに入ります（ダブルクリックですぐ送信）"></textarea>
+          <button id="palSend" type="button" class="primary">送信</button>
+        </div>
+        <div id="palBonus" class="bonus"></div>
+        <div class="pal-tabs" id="palTabs"></div>
+        <div id="palView" class="pal-view"></div>
+        <details class="pal-sec pc-only acc-color-4" data-keep="paltools">
+          <summary>取込・編集</summary>
+          <div class="pal-tools">
+            <label class="file-btn">Tekey JSON読込<input id="tekeyFile" type="file" accept=".json,application/json" multiple></label>
+            <button id="palNew" type="button">新規</button>
+            <button id="palEdit" type="button">編集</button>
+            <button id="palDel" type="button" class="del">削除</button>
+            <button id="palSave" type="button">セーブ（JSON書き出し）</button>
+          </div>
+          <p id="palMsg" class="msg"></p>
+          <div id="palEditor" class="pal-editor" hidden>
+            <input id="palLabel" maxlength="40" placeholder="タブ名">
+            <input id="palName" maxlength="60" placeholder="発言キャラ名（空なら選択中のキャラ）">
+            <textarea id="palStock" rows="10" spellcheck="false"></textarea>
+          </div>
+        </details>
+      </div>
+
+      <div id="tab-chars" class="panel" hidden>
+        <details class="acc-color-1" open>
+          <summary>キャラを取り込む（いあきゃら／駒作成ツールのJSON）</summary>
+          <p class="msg">盤面をクリックしてから Ctrl+V でも取り込めます（ココフォリアの駒コピーは名前しか入らないため取り込めません）</p>
+          <textarea id="charJson" rows="3" spellcheck="false" placeholder="いあきゃらの出力や、駒作成ツールのJSONを貼り付け"></textarea>
+          <div class="row">
+            <label class="file-btn">JSONファイル<input id="charJsonFile" type="file" accept=".json,.txt,application/json,text/plain" multiple></label>
+            <button id="charImport" type="button" class="primary">取り込む</button>
+          </div>
+          <p id="charImportMsg" class="msg"></p>
+        </details>
+        <details class="acc-color-2">
+          <summary>キャラを追加</summary>
+          <div class="piece-form">
+            <input id="pieceName" maxlength="60" placeholder="名前">
+            <input id="pieceColor" type="color" value="#d94a4a">
+            <label class="file">画像<input id="pieceFile" type="file" accept="image/*"></label>
+            <button id="pieceAdd" type="button" class="primary">追加</button>
+          </div>
+          <p id="pieceMsg" class="msg"></p>
+        </details>
+        <ul id="charList" class="plist"></ul>
+        <div id="charDetail" class="char-detail" hidden>
+          <div class="row">
+            <input id="cdName" maxlength="60">
+            <input id="cdColor" type="color">
+          </div>
+          <p id="cdParent" class="msg" hidden></p>
+          <p id="cdReadonly" class="msg" hidden>ほかの人の駒です（見るだけ。盤面で動かすことはできます）</p>
+          <label class="field kp-only-ui">持ち主（KPだけ変更できる）<select id="cdOwner"></select></label>
+          <div class="row">
+            <label class="field grow">駒の大きさ<input id="cdSize" type="number" min="1" max="64" inputmode="numeric"></label>
+            <label class="field grow">レイヤー（100〜200、大きいほど上）<input id="cdLayer" type="number" min="100" max="200" inputmode="numeric"></label>
+          </div>
+          <div class="checks">
+            <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
+            <label class="check"><input id="cdLock" type="checkbox">駒を固定（動かせなくする）</label>
+            <label class="check char-only kp-only-ui"><input id="cdShowParams" type="checkbox">パラメータをほかのPLに見せる</label>
+            <label class="check char-only kp-only-ui"><input id="cdShowOther" type="checkbox">パラメータ以外（ステータス・チャパレ・差分）をほかのPLに見せる</label>
+            <label class="check kp-only-ui"><input id="cdKpOnly" type="checkbox">KPだけに見える駒にする</label>
+          </div>
+          <p id="cdHiddenNote" class="msg" hidden></p>
+          <details id="cdFaceBox" class="cd-sec acc-color-2" data-keep="cdface" open>
+            <summary>差分</summary>
+            <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
+            <div id="cdFaces" class="faces"></div>
+          </details>
+          <details id="cdStatusBox" class="cd-sec char-only acc-color-1" data-keep="cdstatus" open>
+            <summary>ステータス</summary>
+            <table class="st"><tbody id="cdStatus"></tbody></table>
+            <button id="cdAddStatus" type="button">ステータス追加</button>
+          </details>
+          <details id="cdParamBox" class="cd-sec char-only acc-color-3" data-keep="cdparam">
+            <summary>パラメータ</summary>
+            <table class="st"><tbody id="cdParams"></tbody></table>
+            <button id="cdAddParam" type="button">パラメータ追加</button>
+          </details>
+          <label class="field">メモ<textarea id="cdMemo" rows="3"></textarea></label>
+          <label id="cdCmdField" class="field char-only">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
+          <div class="dup">
+            <span>複製</span>
+            <select id="dupType">
+              <option value="char">キャラ駒</option>
+              <option value="stand">立ち絵駒（表情だけ連動）</option>
+            </select>
+            <select id="dupSize">
+              <option value="4">大きさ4（バストアップ）</option>
+              <option value="16">大きさ16（全身）</option>
+              <option value="8">大きさ8</option>
+              <option value="24">大きさ24</option>
+            </select>
+            <button id="dupBtn" type="button">複製する</button>
+          </div>
+          <p id="dupMsg" class="msg"></p>
+          <div class="row">
+            <button id="cdSpeak" type="button" class="primary char-only">このキャラで発言</button>
+            <button id="cdDelete" type="button" class="del">削除</button>
+          </div>
         </div>
       </div>
-      <div id="palFaceList" class="faces pal-faces" hidden></div>
-      <div class="send">
-        <textarea id="palInput" rows="2" placeholder="行を選ぶとここに入ります（ダブルクリックですぐ送信）"></textarea>
-        <button id="palSend" type="button" class="primary">送信</button>
-      </div>
-      <div id="palBonus" class="bonus"></div>
-      <div class="pal-tabs" id="palTabs"></div>
-      <div id="palView" class="pal-view"></div>
-      <details class="pal-sec pc-only acc-color-4" data-keep="paltools">
-        <summary>取込・編集</summary>
-        <div class="pal-tools">
-          <label class="file-btn">Tekey JSON読込<input id="tekeyFile" type="file" accept=".json,application/json" multiple></label>
-          <button id="palNew" type="button">新規</button>
-          <button id="palEdit" type="button">編集</button>
-          <button id="palDel" type="button" class="del">削除</button>
-          <button id="palSave" type="button">セーブ（JSON書き出し）</button>
-        </div>
-        <p id="palMsg" class="msg"></p>
-        <div id="palEditor" class="pal-editor" hidden>
-          <input id="palLabel" maxlength="40" placeholder="タブ名">
-          <input id="palName" maxlength="60" placeholder="発言キャラ名（空なら選択中のキャラ）">
-          <textarea id="palStock" rows="10" spellcheck="false"></textarea>
-        </div>
-      </details>
-    </div>
-
-    <div id="tab-chars" class="panel" hidden>
-      <details class="acc-color-1" open>
-        <summary>キャラを取り込む（いあきゃら／駒作成ツールのJSON）</summary>
-        <p class="msg">盤面をクリックしてから Ctrl+V でも取り込めます（ココフォリアの駒コピーは名前しか入らないため取り込めません）</p>
-        <textarea id="charJson" rows="3" spellcheck="false" placeholder="いあきゃらの出力や、駒作成ツールのJSONを貼り付け"></textarea>
-        <div class="row">
-          <label class="file-btn">JSONファイル<input id="charJsonFile" type="file" accept=".json,.txt,application/json,text/plain" multiple></label>
-          <button id="charImport" type="button" class="primary">取り込む</button>
-        </div>
-        <p id="charImportMsg" class="msg"></p>
-      </details>
-      <details class="acc-color-2">
-        <summary>キャラを追加</summary>
-        <div class="piece-form">
-          <input id="pieceName" maxlength="60" placeholder="名前">
-          <input id="pieceColor" type="color" value="#d94a4a">
-          <label class="file">画像<input id="pieceFile" type="file" accept="image/*"></label>
-          <button id="pieceAdd" type="button" class="primary">追加</button>
-        </div>
-        <p id="pieceMsg" class="msg"></p>
-      </details>
-      <ul id="charList" class="plist"></ul>
-      <div id="charDetail" class="char-detail" hidden>
-        <div class="row">
-          <input id="cdName" maxlength="60">
-          <input id="cdColor" type="color">
-        </div>
-        <p id="cdParent" class="msg" hidden></p>
-        <p id="cdReadonly" class="msg" hidden>ほかの人の駒です（見るだけ。盤面で動かすことはできます）</p>
-        <label class="field kp-only-ui">持ち主（KPだけ変更できる）<select id="cdOwner"></select></label>
-        <div class="row">
-          <label class="field grow">駒の大きさ<input id="cdSize" type="number" min="1" max="64" inputmode="numeric"></label>
-          <label class="field grow">レイヤー（100〜200、大きいほど上）<input id="cdLayer" type="number" min="100" max="200" inputmode="numeric"></label>
-        </div>
-        <div class="checks">
-          <label class="check"><input id="cdActive" type="checkbox">盤面に出す</label>
-          <label class="check"><input id="cdLock" type="checkbox">駒を固定（動かせなくする）</label>
-          <label class="check char-only kp-only-ui"><input id="cdShowParams" type="checkbox">パラメータをほかのPLに見せる</label>
-          <label class="check char-only kp-only-ui"><input id="cdShowOther" type="checkbox">パラメータ以外（ステータス・チャパレ・差分）をほかのPLに見せる</label>
-          <label class="check kp-only-ui"><input id="cdKpOnly" type="checkbox">KPだけに見える駒にする</label>
-        </div>
-        <p id="cdHiddenNote" class="msg" hidden></p>
-        <details id="cdFaceBox" class="cd-sec acc-color-2" data-keep="cdface" open>
-          <summary>差分</summary>
-          <label class="field">差分セット（マイ画像）<select id="cdSet"></select></label>
-          <div id="cdFaces" class="faces"></div>
-        </details>
-        <details id="cdStatusBox" class="cd-sec char-only acc-color-1" data-keep="cdstatus" open>
-          <summary>ステータス</summary>
-          <table class="st"><tbody id="cdStatus"></tbody></table>
-          <button id="cdAddStatus" type="button">ステータス追加</button>
-        </details>
-        <details id="cdParamBox" class="cd-sec char-only acc-color-3" data-keep="cdparam">
-          <summary>パラメータ</summary>
-          <table class="st"><tbody id="cdParams"></tbody></table>
-          <button id="cdAddParam" type="button">パラメータ追加</button>
-        </details>
-        <label class="field">メモ<textarea id="cdMemo" rows="3"></textarea></label>
-        <label id="cdCmdField" class="field char-only">チャパレ（ココフォリア形式）<textarea id="cdCommands" rows="6" spellcheck="false"></textarea></label>
-        <div class="dup">
-          <span>複製</span>
-          <select id="dupType">
-            <option value="char">キャラ駒</option>
-            <option value="stand">立ち絵駒（表情だけ連動）</option>
-          </select>
-          <select id="dupSize">
-            <option value="4">大きさ4（バストアップ）</option>
-            <option value="16">大きさ16（全身）</option>
-            <option value="8">大きさ8</option>
-            <option value="24">大きさ24</option>
-          </select>
-          <button id="dupBtn" type="button">複製する</button>
-        </div>
-        <p id="dupMsg" class="msg"></p>
-        <div class="row">
-          <button id="cdSpeak" type="button" class="primary char-only">このキャラで発言</button>
-          <button id="cdDelete" type="button" class="del">削除</button>
-        </div>
-      </div>
-    </div>
-
-  </aside>
-</main>
+    </aside>
+  </main>
 </body>
 </html>
