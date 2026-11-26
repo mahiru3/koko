@@ -1805,6 +1805,68 @@ body.booted .boot-warn {
   min-height: 3em;
 }
 
+.asset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.asset-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel2);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.asset-card.on {
+  border-color: var(--ng);
+  box-shadow: inset 0 0 0 1px var(--ng);
+}
+
+.asset-card input {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+}
+
+.asset-card img {
+  width: 100%;
+  height: 64px;
+  object-fit: contain;
+  background: repeating-conic-gradient(#0000 0 25%, #8882 0 50%) 0 0 / 12px 12px;
+  border-radius: 4px;
+}
+
+.asset-info {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  color: var(--sub);
+}
+
+.asset-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-used {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--ok);
+  color: #fff;
+  font-size: 10px;
+}
+
 @media (min-width: 801px) {
   .side.floating {
     position: fixed;

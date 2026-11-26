@@ -1,7 +1,7 @@
-import { ref, onValue } from "./51-session-fb.js?v=4i";
-import { renderSpeaker } from "./51-session-chat.js?v=4i";
-import { queueRender } from "./51-session-board.js?v=4i";
-import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4i";
+import { ref, onValue } from "./51-session-fb.js?v=4j";
+import { renderSpeaker } from "./51-session-chat.js?v=4j";
+import { queueRender } from "./51-session-board.js?v=4j";
+import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4j";
 
 export const $ = (id) => document.getElementById(id);
 
@@ -28,7 +28,7 @@ export const MOBILE = matchMedia("(max-width: 800px)");
 export const S = {
   db: null, uid: null, roomId: "", name: "", color: "#4a90d9",
   loader: null, system: null, calc: null, systemId: "DiceBot",
-  meta: {}, vars: {}, chars: {}, items: {}, markers: {}, roomMarkers: {}, scenes: {}, notes: {},
+  meta: {}, vars: {}, chars: {}, items: {}, markers: {}, roomMarkers: {}, scenes: {}, notes: {}, effects: {}, assetSel: new Set(),
   assets: new Map(), nodes: new Map(),
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
   speaker: "", selChar: "", palettes: [], palSel: "",

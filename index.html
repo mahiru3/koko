@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>koko</title>
-  <link rel="stylesheet" href="51-session.css?v=4i">
-  <script src="51-session-bcdice.js?v=4i"></script>
-  <script src="51-session-jszip.js?v=4i"></script>
-  <script type="module" src="51-session.js?v=4i"></script>
+  <link rel="stylesheet" href="51-session.css?v=4j">
+  <script src="51-session-bcdice.js?v=4j"></script>
+  <script src="51-session-jszip.js?v=4j"></script>
+  <script type="module" src="51-session.js?v=4j"></script>
 </head>
 <body>
   <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -41,7 +41,7 @@
       <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
       <button id="themeBtn" type="button" class="theme-btn">ライト</button>
       <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-      <span class="ver">v4i</span>
+      <span class="ver">v4j</span>
     </header>
 
     <section id="boardWrap" class="board-wrap">
@@ -114,6 +114,18 @@
         <details class="acc-color-1">
           <summary>ルーム変数</summary>
           <ul id="varList" class="mlist"></ul>
+        </details>
+        <details class="acc-color-1" data-keep="assets">
+          <summary>部屋の画像</summary>
+          <p class="msg">「使用中」の画像を消すと、使っている所に表示されなくなります（マイ画像は消えません）</p>
+          <div class="row wrap">
+            <button id="assetSelAll" type="button">すべて選択</button>
+            <button id="assetSelNone" type="button">選択を解除</button>
+            <button id="assetDelSel" type="button" class="del">選択を削除</button>
+            <button id="assetDelUnused" type="button" class="del">未使用を削除</button>
+          </div>
+          <p id="assetMsg" class="msg"></p>
+          <div id="assetGrid" class="asset-grid"></div>
         </details>
         <details class="acc-color-4">
           <summary>部屋の管理</summary>

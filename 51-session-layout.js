@@ -1,6 +1,6 @@
-import { $, MOBILE, S, isPc } from "./51-session-core.js?v=4i";
-import { placeChatWin, scrollLog } from "./51-session-chat.js?v=4i";
-import { queueRender } from "./51-session-board.js?v=4i";
+import { $, MOBILE, S, isPc } from "./51-session-core.js?v=4j";
+import { placeChatWin, scrollLog } from "./51-session-chat.js?v=4j";
+import { queueRender } from "./51-session-board.js?v=4j";
 
 export function initTabs() {
   document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => showTab(b.dataset.tab)));

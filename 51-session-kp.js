@@ -1,10 +1,10 @@
-import { ref, get, push, set, update, remove } from "./51-session-fb.js?v=4i";
-import { readRoomZip } from "./51-session-import.js?v=4i";
-import { $, CH_TABS, S, isStand, showsParams, showsOther, el, setStatus, newKey, src, rp, sorted, onlinePids, playerName, curSceneId, objBase, objPath } from "./51-session-core.js?v=4i";
-import { showTab, applyKpLayout } from "./51-session-layout.js?v=4i";
-import { colKeys, tabColor, tabName, postSystem, tabLabel, rerenderLog, tabOf } from "./51-session-chat.js?v=4i";
-import { queueRender, uploadAsset, centerPos } from "./51-session-board.js?v=4i";
-import { deleteSecret, isOpen, isSecret, memberBoxes, removeAllSecrets, renameSecret, setOpen, setSecretColor } from "./51-session-secret.js?v=4i";
+import { ref, get, push, set, update, remove } from "./51-session-fb.js?v=4j";
+import { readRoomZip } from "./51-session-import.js?v=4j";
+import { $, CH_TABS, S, isStand, showsParams, showsOther, el, setStatus, newKey, src, rp, sorted, onlinePids, playerName, curSceneId, objBase, objPath } from "./51-session-core.js?v=4j";
+import { showTab, applyKpLayout } from "./51-session-layout.js?v=4j";
+import { colKeys, tabColor, tabName, postSystem, tabLabel, rerenderLog, tabOf } from "./51-session-chat.js?v=4j";
+import { queueRender, uploadAsset, centerPos } from "./51-session-board.js?v=4j";
+import { deleteSecret, isOpen, isSecret, memberBoxes, removeAllSecrets, renameSecret, setOpen, setSecretColor } from "./51-session-secret.js?v=4j";
 
 export function renderPlayers() {
   const list = $("memberList");
@@ -576,6 +576,7 @@ export function initRoomTab() {
   $("itemAdd").addEventListener("click", () => addObj("items"));
   $("markerAdd").addEventListener("click", () => addObj("markers"));
   $("logDelBtn").addEventListener("click", deleteLogs);
+  initAssetList();
   $("roomDelete").addEventListener("click", deleteRoom);
 }
 
@@ -613,7 +614,111 @@ export async function deleteRoom() {
 
 export function queueAssetUi() {
   clearTimeout(S.assetUiT);
-  S.assetUiT = setTimeout(() => { renderBoardPickers(); renderObjLists(); }, 300);
+  S.assetUiT = setTimeout(() => { renderBoardPickers(); renderObjLists(); renderAssetList(); }, 300);
+}
+
+export function assetUsage() {
+  const use = new Map();
+  const add = (k, label) => {
+    if (!k || typeof k !== "string" || k.startsWith("lib:") || !S.assets.has(k)) return;
+    if (!use.has(k)) use.set(k, []);
+    const l = use.get(k);
+    if (!l.includes(label)) l.push(label);
+  };
+  Object.values(S.items || {}).forEach((o) => { add(o.img, "スクパネ「" + (o.memo || "") + "」"); add(o.cover, "スクパネ「" + (o.memo || "") + "」の背"); });
+  Object.values(S.roomMarkers || {}).forEach((o) => add(o.img, "マーカー（部屋）"));
+  Object.values(S.scenes || {}).forEach((sc) => {
+    const n = "シーン「" + (sc.name || "") + "」";
+    add(sc.bg, n + "の背景");
+    add(sc.fg, n + "の前景");
+    Object.values(sc.markers || {}).forEach((o) => add(o.img, n + "のマーカー"));
+  });
+  const b = (S.meta && S.meta.board) || {};
+  add(b.bg, "今の盤面の背景");
+  add(b.fg, "今の盤面の前景");
+  Object.values(S.chars || {}).forEach((c) => {
+    add(c.icon, "駒「" + (c.name || "") + "」");
+    (c.faces || []).forEach((f) => add(f && f.icon, "駒「" + (c.name || "") + "」の差分"));
+  });
+  Object.values(S.effects || {}).forEach((f) => add(f.img, "カットイン「" + (f.name || "") + "」"));
+  S.msgs.forEach((m) => add(m.icon, "チャットの発言アイコン"));
+  return use;
+}
+
+function assetName(k) {
+  const m = k.match(/^(.*)_([a-z0-9]{2,5})$/i);
+  const base = m ? m[1] : k;
+  return (base.length > 10 ? base.slice(0, 8) + "…" : base) + (m ? "." + m[2] : "");
+}
+
+export function renderAssetList() {
+  const grid = $("assetGrid");
+  if (!grid || !S.isKP) return;
+  const use = assetUsage();
+  [...S.assetSel].forEach((k) => { if (!S.assets.has(k)) S.assetSel.delete(k); });
+  grid.replaceChildren();
+  if (!S.assets.size) { grid.append(el("p", "msg", "部屋の画像はありません")); return; }
+  [...S.assets.keys()].sort().forEach((k) => {
+    const card = el("label", "asset-card" + (S.assetSel.has(k) ? " on" : ""));
+    const cb = el("input");
+    cb.type = "checkbox";
+    cb.checked = S.assetSel.has(k);
+    cb.addEventListener("change", () => { if (cb.checked) S.assetSel.add(k); else S.assetSel.delete(k); card.classList.toggle("on", cb.checked); updateAssetMsg(); });
+    const im = el("img");
+    im.alt = "";
+    im.loading = "lazy";
+    im.src = S.assets.get(k) || "";
+    const used = use.get(k);
+    const info = el("span", "asset-info");
+    info.append(el("span", "asset-name", assetName(k)), el("span", "asset-size", Math.round(((S.assets.get(k) || "").length * 3) / 4 / 1024) + "KB"));
+    card.title = k + (used ? "\n使用中：" + used.join("、") : "\n未使用");
+    card.append(cb, im, info);
+    if (used) card.append(el("span", "asset-used", "使用中"));
+    grid.append(card);
+  });
+  updateAssetMsg();
+}
+
+function updateAssetMsg() {
+  const box = $("assetMsg");
+  if (box) box.textContent = S.assetSel.size ? S.assetSel.size + "枚を選択中" : "";
+}
+
+async function deleteAssetKeys(keys, what) {
+  const use = assetUsage();
+  const used = keys.filter((k) => use.has(k));
+  let msg = what + " " + keys.length + "枚 を削除しますか？";
+  if (used.length) {
+    const lines = used.slice(0, 8).map((k) => "・" + assetName(k) + "：" + use.get(k).join("、"));
+    msg += "\n\nこのうち " + used.length + "枚 は使用中です。消すと表示されなくなります。\n" + lines.join("\n") + (used.length > 8 ? "\n…ほか" + (used.length - 8) + "枚" : "");
+  }
+  if (!confirm(msg)) return;
+  const up = {};
+  keys.forEach((k) => { up["assets/" + k] = null; });
+  try {
+    await update(rp(""), up);
+    keys.forEach((k) => S.assetSel.delete(k));
+    $("assetMsg").textContent = keys.length + "枚の画像を削除しました";
+    await postSystem(S.name + " が部屋の画像を " + keys.length + "枚 削除しました");
+  } catch (e) {
+    $("assetMsg").textContent = "削除に失敗しました: " + e.message;
+  }
+}
+
+export function initAssetList() {
+  $("assetSelAll").addEventListener("click", () => { S.assets.forEach((v, k) => S.assetSel.add(k)); renderAssetList(); });
+  $("assetSelNone").addEventListener("click", () => { S.assetSel.clear(); renderAssetList(); });
+  $("assetDelSel").addEventListener("click", () => {
+    const keys = [...S.assetSel].filter((k) => S.assets.has(k));
+    if (!keys.length) { $("assetMsg").textContent = "画像を選んでください"; return; }
+    deleteAssetKeys(keys, "選んだ画像");
+  });
+  $("assetDelUnused").addEventListener("click", () => {
+    const use = assetUsage();
+    const keys = [...S.assets.keys()].filter((k) => !use.has(k));
+    if (!keys.length) { $("assetMsg").textContent = "未使用の画像はありません"; return; }
+    deleteAssetKeys(keys, "未使用の画像");
+  });
 }
 
 export function updateAssetInfo() {
