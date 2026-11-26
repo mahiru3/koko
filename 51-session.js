@@ -1,15 +1,18 @@
-import { firebaseConfig } from "./51-session-config.js?v=4k";
-import { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, getDatabase, ref, set, update, remove, onValue, onChildAdded, onChildRemoved, serverTimestamp, onDisconnect, connectDatabaseEmulator } from "./51-session-fb.js?v=4k";
-import { ensureProfile } from "./51-session-id.js?v=4k";
-import { $, params, ROOM_RE, S, applyTheme, kpCheck, el, setStatus, randomId, rp, syncMarkers } from "./51-session-core.js?v=4k";
-import { initTabs, initKeep, initWindows, applyKpLayout } from "./51-session-layout.js?v=4k";
-import { initChat, chansChanged, ctBonus, renderBonus, renderSpeaker, rerenderLog } from "./51-session-chat.js?v=4k";
-import { initBoard, queueRender } from "./51-session-board.js?v=4k";
-import { initPalettes, renderPaletteTabs } from "./51-session-pal.js?v=4k";
-import { initChars, initPaste, renderCharList, renderCharDetail } from "./51-session-chars.js?v=4k";
-import { renderPlayers, renderScenes, renderNotes, renderBoardPickers, renderObjLists, renderVars, initRoomTab, queueAssetUi, updateAssetInfo, watchKpData } from "./51-session-kp.js?v=4k";
-import { secretsForRole, syncOpened } from "./51-session-secret.js?v=4k";
-import { initLog } from "./51-session-log.js?v=4k";
+import { firebaseConfig } from "./51-session-config.js?v=4l";
+import { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, getDatabase, ref, set, update, remove, onValue, onChildAdded, onChildRemoved, serverTimestamp, onDisconnect, connectDatabaseEmulator } from "./51-session-fb.js?v=4l";
+import { ensureProfile } from "./51-session-id.js?v=4l";
+import { $, params, ROOM_RE, S, applyTheme, kpCheck, el, setStatus, randomId, rp, syncMarkers } from "./51-session-core.js?v=4l";
+import { initTabs, initKeep, initWindows, applyKpLayout } from "./51-session-layout.js?v=4l";
+import { initChat, chansChanged, ctBonus, renderBonus, renderSpeaker, rerenderLog } from "./51-session-chat.js?v=4l";
+import { initBoard, queueRender } from "./51-session-board.js?v=4l";
+import { initPalettes, renderPaletteTabs } from "./51-session-pal.js?v=4l";
+import { initChars, initPaste, renderCharList, renderCharDetail } from "./51-session-chars.js?v=4l";
+import { renderPlayers, renderScenes, renderNotes, renderBoardPickers, renderObjLists, renderVars, initRoomTab, queueAssetUi, updateAssetInfo, watchKpData } from "./51-session-kp.js?v=4l";
+import { secretsForRole, syncOpened } from "./51-session-secret.js?v=4l";
+import { initLog } from "./51-session-log.js?v=4l";
+import { mergeScenes, watchSecretScenes, stageCheck } from "./51-session-scene.js?v=4l";
+import { initSound, soundListsChanged } from "./51-session-sound.js?v=4l";
+import { initFx } from "./51-session-fx.js?v=4l";
 
 function initJoin() {
   $("joinRoom").value = params.get("room") || "";
@@ -82,6 +85,8 @@ async function startRoom() {
   initChars();
   initPalettes();
   initRoomTab();
+  initSound();
+  initFx();
   $("copyUrl").addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(location.href); setStatus("URLをコピーしました"); }
     catch { prompt("このURLを共有してください", location.href); }
@@ -106,17 +111,12 @@ async function startRoom() {
     watchKpData();
     renderPlayers();
     applyKpLayout();
-    syncMarkers();
-    renderBoardPickers();
-    renderObjLists();
+    watchSecretScenes();
     renderScenes();
     S.vars = S.meta.vars || {};
-    const b = S.meta.board || {};
-    const sig = [b.fieldW, b.fieldH, b.fg, S.meta.fieldMult].join("|");
-    if (sig !== S.boardSig) { S.boardSig = sig; S.fitted = false; }
     if ((S.meta.system || "DiceBot") !== S.systemId) loadSystem(S.meta.system || "DiceBot");
     $("fieldMult").value = String(S.meta.fieldMult || 4);
-    $("gridShow").checked = !!(S.meta.board && S.meta.board.displayGrid);
+    stageCheck(true);
     if (document.activeElement !== $("ctBonus")) $("ctBonus").value = ctBonus();
     if (S.chanReady) chansChanged();
     renderBonus();
@@ -125,11 +125,13 @@ async function startRoom() {
   });
   const watch = (name, after) => onValue(rp(name), (s) => { S[name] = s.val() || {}; if (after) after(); queueRender(); });
   watch("chars", () => { renderCharList(); renderSpeaker(); renderCharDetail(); renderPaletteTabs(); renderPlayers(); queueAssetUi(); });
-  watch("effects", queueAssetUi);
+  watch("effects", () => { queueAssetUi(); soundListsChanged(); });
   onValue(ref(S.db, "lib/" + S.pid + "/sets"), (s) => { S.mySets = s.val() || {}; renderCharDetail(); });
   watch("items", () => { renderObjLists(); queueAssetUi(); });
   onValue(rp("markers"), (s) => { S.roomMarkers = s.val() || {}; syncMarkers(); renderObjLists(); queueRender(); queueAssetUi(); });
-  watch("scenes", () => { syncMarkers(); renderScenes(); renderObjLists(); renderBoardPickers(); queueAssetUi(); });
+  onValue(rp("scenes"), (s) => { S.pubScenes = s.val() || {}; mergeScenes(); });
+  watch("bgms", soundListsChanged);
+  watch("ses", soundListsChanged);
   watch("notes", renderNotes);
 }
 

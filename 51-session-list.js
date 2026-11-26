@@ -1,9 +1,9 @@
-import { el } from "./51-session-core.js?v=4k";
+import { el } from "./51-session-core.js?v=4l";
 
 const STATES = {};
 
 export function listState(name, checked) {
-  if (!STATES[name]) STATES[name] = { checked: checked || new Set(), anchor: "", q: "", bar: null, cfg: null, ul: null };
+  if (!STATES[name]) STATES[name] = { checked: checked || new Set(), anchor: "", q: "", bar: null, cfg: null, ul: null, edit: false, onEdit: null };
   return STATES[name];
 }
 
@@ -37,7 +37,12 @@ export function initListBar(box, name, opt) {
   q.addEventListener("input", () => { st.q = q.value.trim().toLowerCase(); opt.onChange(); });
   const count = el("span", "lst-count");
   top.append(q, count);
-  const row = el("div", "lst-row");
+  const edit = el("button", "mini lst-edit", "編集");
+  edit.type = "button";
+  edit.title = "選択・タグ・複製・削除などの道具を出す";
+  edit.addEventListener("click", () => setEdit(name, !st.edit));
+  top.append(edit);
+  const row = el("div", "lst-row lst-edit-only");
   const allLab = el("label", "check lst-all");
   const all = el("input");
   all.type = "checkbox";
@@ -60,9 +65,10 @@ export function initListBar(box, name, opt) {
     });
     row.append(b);
   });
-  const hint = el("p", "msg lst-hint", opt.hint || "≡をドラッグで並べ替え。チェック欄を上下にドラッグすると続けて選べます（Shift／Ctrl＋クリックでも選べます）");
+  const hint = el("p", "msg lst-hint lst-edit-only", opt.hint || "チェック欄を押したまま上下にドラッグすると続けて選べます");
   box.append(top, row, hint);
-  st.bar = { q, count, all, unit: opt.unit || "件" };
+  st.bar = { q, count, all, edit, box, unit: opt.unit || "件" };
+  st.onEdit = opt.onChange;
   syncBar(name);
 }
 
@@ -75,6 +81,22 @@ export function syncBar(name) {
   st.bar.count.textContent = (vis.length === total ? total + st.bar.unit : vis.length + "／" + total + st.bar.unit) + (n ? "・" + n + "選択" : "");
   st.bar.all.checked = vis.length > 0 && vis.every((id) => st.checked.has(id));
   st.bar.all.indeterminate = !st.bar.all.checked && vis.some((id) => st.checked.has(id));
+}
+
+export function setEdit(name, on) {
+  const st = listState(name);
+  st.edit = !!on;
+  if (!st.edit) st.checked.clear();
+  if (st.bar) {
+    st.bar.box.classList.toggle("editing", st.edit);
+    st.bar.edit.classList.toggle("on", st.edit);
+    st.bar.edit.textContent = st.edit ? "編集を終わる" : "編集";
+  }
+  if (st.onEdit) st.onEdit();
+}
+
+export function isEditing(name) {
+  return listState(name).edit;
 }
 
 export function renderRows(ul, name, entries, cfg) {
@@ -91,6 +113,8 @@ export function renderRows(ul, name, entries, cfg) {
   ul._all = all;
   ul._ids = vis.map(([id]) => id);
   ul.classList.add("lst");
+  ul.classList.toggle("editing", st.edit);
+  ul.title = st.edit ? "" : "ドラッグで並べ替え。Shift／Ctrl＋クリックで複数選ぶと、まとめて動かせます";
   ul.replaceChildren();
   vis.forEach(([id, o]) => {
     const li = el("li", "lst-item" + (st.checked.has(id) ? " checked" : ""));
@@ -101,10 +125,9 @@ export function renderRows(ul, name, entries, cfg) {
     cb.tabIndex = -1;
     cb.checked = st.checked.has(id);
     chk.append(cb);
-    const grip = el("span", "lst-grip", "≡");
-    grip.title = "ドラッグで並べ替え";
-    li.append(chk, grip);
+    li.append(chk);
     cfg.fill(li, id, o);
+    li.querySelectorAll("img").forEach((im) => { im.draggable = false; });
     ul.append(li);
   });
   if (!vis.length) ul.append(el("li", "empty", entries.length ? "当てはまるものがありません" : cfg.empty || "まだありません"));
@@ -141,9 +164,10 @@ function changed(name) {
 function bindList(ul, name) {
   ul._lst = true;
   const st = listState(name);
+  ul.addEventListener("dragstart", (e) => e.preventDefault());
   ul.addEventListener("click", (e) => {
+    if (ul._skipClick) { ul._skipClick = false; e.preventDefault(); e.stopPropagation(); return; }
     if (e.target.closest(".lst-chk")) { e.preventDefault(); return; }
-    if (e.target.closest(".lst-grip")) return;
     const li = e.target.closest("li.lst-item");
     if (!li || li.parentElement !== ul) return;
     if (e.target.closest("input, textarea, select, button, a, .no-row")) return;
@@ -163,23 +187,24 @@ function bindList(ul, name) {
       changed(name);
       return;
     }
-    if (st.cfg && st.cfg.toggleOnClick) {
+    if (st.edit && st.cfg && st.cfg.toggleOnClick) {
       if (st.checked.has(id)) st.checked.delete(id); else st.checked.add(id);
       st.anchor = id;
       changed(name);
       return;
     }
+    if (!st.edit && st.checked.size) { st.checked.clear(); changed(name); }
     if (st.cfg && st.cfg.onOpen) st.cfg.onOpen(id, e);
   });
   ul.addEventListener("pointerdown", (e) => {
     if (e.button !== 0) return;
     const chk = e.target.closest(".lst-chk");
-    const grip = e.target.closest(".lst-grip");
     const li = e.target.closest("li.lst-item");
-    if (!li || li.parentElement !== ul || (!chk && !grip)) return;
-    e.preventDefault();
-    if (chk) startSelect(ul, name, li, e);
-    else startMove(ul, name, li, e);
+    if (!li || li.parentElement !== ul) return;
+    if (chk && st.edit) { e.preventDefault(); startSelect(ul, name, li, e); return; }
+    const inner = e.target.closest("details[open] > :not(summary)");
+    if (e.target.closest("input, textarea, select, button, a, .no-row") || (inner && li.contains(inner))) return;
+    startMove(ul, name, li, e);
   });
 }
 
@@ -222,7 +247,7 @@ function startMove(ul, name, li, e) {
   const grid = !!(st.cfg && st.cfg.grid);
   const sx = e.clientX, sy = e.clientY;
   let moving = false, target = null, after = false, drop = null;
-  const ghost = el("div", "lst-ghost", drag.length > 1 ? drag.length + "件" : (li.textContent || "").replace("≡", "").trim().slice(0, 16));
+  const ghost = el("div", "lst-ghost", drag.length > 1 ? drag.length + "件" : (li.textContent || "").trim().slice(0, 16));
   const clear = () => {
     rowsOf(ul).forEach((r) => r.classList.remove("drop-before", "drop-after", "dragging"));
     document.querySelectorAll(".drop-hover").forEach((d) => d.classList.remove("drop-hover"));
@@ -231,6 +256,8 @@ function startMove(ul, name, li, e) {
     if (!moving && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
     if (!moving) {
       moving = true;
+      const sel = window.getSelection();
+      if (sel) sel.removeAllRanges();
       document.body.append(ghost);
       document.body.classList.add("lst-moving");
       rowsOf(ul).forEach((r) => { if (drag.includes(r.dataset.id)) r.classList.add("dragging"); });
@@ -258,6 +285,8 @@ function startMove(ul, name, li, e) {
     document.body.classList.remove("lst-moving");
     clear();
     if (!moving) return;
+    ul._skipClick = true;
+    setTimeout(() => { ul._skipClick = false; }, 0);
     if (drop) { st.cfg.onDrop(drop.dataset.drop, drag); return; }
     if (!target || !st.cfg || !st.cfg.onReorder) return;
     const rest = ul._all.filter((k) => !drag.includes(k));

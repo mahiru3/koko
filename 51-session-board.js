@@ -1,10 +1,10 @@
-import { set, update } from "./51-session-fb.js?v=4k";
-import { compressImage } from "./51-session-import.js?v=4k";
-import { $, UNIT, PAD, FG_Z, S, visibleChar, isStand, canSeeOther, el, blurInput, setStatus, newKey, charIcon, src, rp, objPath } from "./51-session-core.js?v=4k";
-import { showTab } from "./51-session-layout.js?v=4k";
-import { setSpeaker, sendChat } from "./51-session-chat.js?v=4k";
-import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4k";
-import { selectObj } from "./51-session-kp.js?v=4k";
+import { set, update } from "./51-session-fb.js?v=4l";
+import { compressImage } from "./51-session-import.js?v=4l";
+import { $, UNIT, PAD, FG_Z, S, visibleChar, isStand, canSeeOther, el, blurInput, setStatus, newKey, charIcon, src, rp, objPath, dbr, viewBoard } from "./51-session-core.js?v=4l";
+import { showTab } from "./51-session-layout.js?v=4l";
+import { setSpeaker, sendChat } from "./51-session-chat.js?v=4l";
+import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4l";
+import { selectObj } from "./51-session-kp.js?v=4l";
 
 export function refreshAvatars() {
   document.querySelectorAll("img[data-asset]").forEach((im) => {
@@ -14,7 +14,7 @@ export function refreshAvatars() {
 }
 
 export function fieldRect() {
-  const b = S.meta.board || {};
+  const b = viewBoard();
   const mult = S.meta.fieldMult || 4;
   const w = (b.fieldW || 16) * mult;
   const h = (b.fieldH || 9) * mult;
@@ -124,7 +124,7 @@ export function renderBoard() {
   board.style.height = (maxY - minY + PAD * 2) * UNIT + "px";
   layoutSizer();
 
-  const b = S.meta.board || {};
+  const b = viewBoard();
   const wrap = $("boardWrap");
   const bg = src(b.bg);
   wrap.style.backgroundImage = bg ? "url(\"" + bg + "\")" : "";
@@ -269,7 +269,7 @@ export function bindPointer(node) {
     if (wasDrag && moved && !cancel) {
       const nx = Math.round(ox + (e.clientX - sx) / S.zoom / UNIT);
       const ny = Math.round(oy + (e.clientY - sy) / S.zoom / UNIT);
-      update(rp(objPath(kind, id)), { x: nx, y: ny }).catch((err) => setStatus("保存失敗: " + err.message, true));
+      update(dbr(objPath(kind, id)), { x: nx, y: ny }).catch((err) => setStatus("保存失敗: " + err.message, true));
     } else if (!moved && !cancel && o) {
       onObjectClick(kind, id, o);
     }

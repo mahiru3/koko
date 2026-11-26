@@ -1,7 +1,7 @@
-import { ref, onValue } from "./51-session-fb.js?v=4k";
-import { renderSpeaker } from "./51-session-chat.js?v=4k";
-import { queueRender } from "./51-session-board.js?v=4k";
-import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4k";
+import { ref, onValue } from "./51-session-fb.js?v=4l";
+import { renderSpeaker } from "./51-session-chat.js?v=4l";
+import { queueRender } from "./51-session-board.js?v=4l";
+import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4l";
 
 export const $ = (id) => document.getElementById(id);
 
@@ -28,13 +28,13 @@ export const MOBILE = matchMedia("(max-width: 800px)");
 export const S = {
   db: null, uid: null, roomId: "", name: "", color: "#4a90d9",
   loader: null, system: null, calc: null, systemId: "DiceBot",
-  meta: {}, vars: {}, chars: {}, items: {}, markers: {}, roomMarkers: {}, scenes: {}, notes: {}, effects: {}, assetSel: new Set(),
+  meta: {}, vars: {}, chars: {}, items: {}, markers: {}, roomMarkers: {}, scenes: {}, pubScenes: {}, sScenes: {}, sceneLoc: {}, notes: {}, effects: {}, bgms: {}, ses: {}, sChans: {}, assetSel: new Set(),
   assets: new Map(), nodes: new Map(),
   zoom: 1, origin: { x: 0, y: 0 }, drag: null, renderQueued: false, fitted: false,
   speaker: "", selChar: "", palettes: [], palSel: "",
   pid: "", libSets: new Map(), libFiles: new Map(), libSubs: new Set(), mySets: {}, showAllChars: false,
   isKP: false, isOwner: false, kpOpen: true, selItem: "", selMarker: "", off: { x: 0, y: 0 }, created: "", metaSeen: false, players: {}, online: {},
-  kp: {}, kpLoaded: false, kpOff: null, tagView: "", assetView: "*", foldersMade: false,
+  kp: {}, kpLoaded: false, kpOff: null, tagView: "", assetView: "*", pickView: "*", foldersMade: false,
   chatTab: "main", msgs: [], unread: {}, popReady: false, bonus: null, palPlace: {}, palPick: -1, palClosed: new Set(), cbOrder: [], wins: {}, winZ: 60, colOrder: [], popPc: false
 };
 
@@ -173,15 +173,57 @@ export function rp(path) {
   return ref(S.db, "rooms/" + S.roomId + (path ? "/" + path : ""));
 }
 
+export function dbr(path) {
+  return path ? ref(S.db, path) : ref(S.db);
+}
+
+export function R(path) {
+  return "rooms/" + S.roomId + (path ? "/" + path : "");
+}
+
+export function SP(path) {
+  return "secrets/" + S.roomId + (path ? "/" + path : "");
+}
+
+export function restricted(k) {
+  return !!(S.sChans && S.sChans[k]);
+}
+
+export function sceneTab(sc) {
+  return (sc && sc.tab) || "main";
+}
+
+export function scenePath(sid) {
+  return S.sceneLoc[sid] === "s" ? SP("scenes/" + sid) : R("scenes/" + sid);
+}
+
+export function tabScene(k) {
+  let sid = "";
+  if (!k || k === "main") sid = S.meta && S.meta.sceneId;
+  else if (restricted(k)) sid = S.sChans[k].scene;
+  else sid = S.meta && S.meta.tabScenes && S.meta.tabScenes[k];
+  return sid && S.scenes[sid] && sceneTab(S.scenes[sid]) === (k || "main") ? sid : "";
+}
+
+export function stageTab() {
+  return S.chatTab && S.chatTab !== "main" && tabScene(S.chatTab) ? S.chatTab : "main";
+}
+
 export function curSceneId() {
-  const sid = S.meta && S.meta.sceneId;
-  return sid && S.scenes[sid] ? sid : "";
+  return tabScene(stageTab());
+}
+
+export function viewBoard() {
+  const st = stageTab();
+  if (st === "main") return S.meta.board || {};
+  const sc = S.scenes[tabScene(st)] || {};
+  return { bg: sc.bg || "", fg: sc.fg || "", fieldW: sc.fieldW || 16, fieldH: sc.fieldH || 9, gridSize: sc.gridSize || 2, displayGrid: !!sc.displayGrid };
 }
 
 export function objBase(kind) {
-  if (kind !== "markers") return kind;
+  if (kind !== "markers") return R(kind);
   const sid = curSceneId();
-  return sid ? "scenes/" + sid + "/markers" : "markers";
+  return sid ? scenePath(sid) + "/markers" : R("markers");
 }
 
 export function objPath(kind, id) {

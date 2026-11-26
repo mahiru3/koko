@@ -1,11 +1,12 @@
-import { ref, get, push, set, update, remove, onValue } from "./51-session-fb.js?v=4k";
-import { readRoomZip } from "./51-session-import.js?v=4k";
-import { $, CH_TABS, S, isStand, showsParams, showsOther, el, setStatus, newKey, src, rp, sorted, onlinePids, playerName, curSceneId, objBase, objPath } from "./51-session-core.js?v=4k";
-import { showTab, applyKpLayout } from "./51-session-layout.js?v=4k";
-import { colKeys, tabColor, tabName, postSystem, tabLabel, rerenderLog, tabOf } from "./51-session-chat.js?v=4k";
-import { queueRender, uploadAsset, centerPos } from "./51-session-board.js?v=4k";
-import { deleteSecret, isOpen, isSecret, memberBoxes, removeAllSecrets, renameSecret, setOpen, setSecretColor } from "./51-session-secret.js?v=4k";
-import { listState, orderedEntries, checkedIds, clearChecked, initListBar, renderRows } from "./51-session-list.js?v=4k";
+import { ref, get, push, set, update, remove, onValue } from "./51-session-fb.js?v=4l";
+import { readRoomZip } from "./51-session-import.js?v=4l";
+import { $, CH_TABS, S, isStand, showsParams, showsOther, el, setStatus, newKey, src, rp, sorted, onlinePids, playerName, curSceneId, objBase, objPath, dbr, R, SP, scenePath, sceneTab, tabScene, restricted, stageTab, viewBoard } from "./51-session-core.js?v=4l";
+import { showTab, applyKpLayout } from "./51-session-layout.js?v=4l";
+import { colKeys, tabColor, tabName, postSystem, tabLabel, rerenderLog, tabOf } from "./51-session-chat.js?v=4l";
+import { queueRender, uploadAsset, centerPos } from "./51-session-board.js?v=4l";
+import { deleteSecret, isOpen, isSecret, memberBoxes, removeAllSecrets, renameSecret, setOpen, setSecretColor } from "./51-session-secret.js?v=4l";
+import { applyScene, clearCurrent, renderSceneEditor, restrictTab, sceneCount } from "./51-session-scene.js?v=4l";
+import { listState, orderedEntries, checkedIds, clearChecked, initListBar, renderRows, isEditing } from "./51-session-list.js?v=4l";
 
 export function renderPlayers() {
   const list = $("memberList");
@@ -145,7 +146,7 @@ export function renderChanList() {
   renderLogDelOptions();
   const ul = $("chanList");
   if (!ul || !S.isKP) return;
-  if (ul.contains(document.activeElement) && document.activeElement.matches("input")) return;
+  if (ul.contains(document.activeElement) && document.activeElement.matches("input:not([type=checkbox])")) return;
   ul.replaceChildren();
   colKeys().forEach((k) => {
     const sec = isSecret(k);
@@ -161,11 +162,17 @@ export function renderChanList() {
     clr.hidden = !tabColor(k);
     clr.addEventListener("click", () => (sec ? setSecretColor(k, null) : set(rp("meta/tabColors/" + k), null)));
     li.append(name, col, clr);
-    if (sec) {
-      const op = el("button", "mini" + (isOpen(k) ? " on" : ""), isOpen(k) ? "公開中（押すと秘匿に戻す）" : "公開する");
-      op.type = "button";
-      op.addEventListener("click", () => setOpen(k, !isOpen(k)));
-      li.append(op);
+    if (k !== "main") {
+      const lab = el("label", "check all-check");
+      const all = el("input");
+      all.type = "checkbox";
+      all.checked = !sec || isOpen(k);
+      all.addEventListener("change", () => {
+        if (!sec) { all.checked = true; restrictTab(k); return; }
+        setOpen(k, all.checked);
+      });
+      lab.append(all, document.createTextNode("全員が見られる"));
+      li.append(lab);
     }
     if (!CH_TABS.some(([x]) => x === k)) {
       const rn = el("button", "mini", "名前");
@@ -176,7 +183,11 @@ export function renderChanList() {
       dl.addEventListener("click", () => (sec ? deleteSecret(k) : deleteChan(k)));
       li.append(rn, dl);
     }
-    if (sec) li.append(memberBoxes(k));
+    if (sec) {
+      const mb = memberBoxes(k);
+      mb.classList.toggle("dim", isOpen(k));
+      li.append(mb);
+    }
     ul.append(li);
   });
 }
@@ -199,18 +210,12 @@ export async function renameChan(k) {
 
 export async function deleteChan(k) {
   const name = tabName(k);
-  if (!confirm("タブ「" + name + "」を削除しますか？\n（このタブの発言は表示されなくなります）")) return;
-  await set(rp("meta/chans/" + k), null);
+  const n = sceneCount(k);
+  if (!confirm("タブ「" + name + "」を削除しますか？\n（このタブの発言は表示されなくなります）" + (n ? "\nこのタブのシーン " + n + "件は、メインのシーンになります" : ""))) return;
+  const up = { [R("meta/chans/" + k)]: null, [R("meta/tabScenes/" + k)]: null, [R("meta/play/" + k)]: null };
+  Object.entries(S.pubScenes || {}).forEach(([sid, sc]) => { if (sc && sc.tab === k) up[R("scenes/" + sid + "/tab")] = null; });
+  await update(dbr(""), up);
   await postSystem("チャットのタブ「" + name + "」を削除しました");
-}
-
-export async function applyScene(id) {
-  const sc = S.scenes[id];
-  if (!sc) return;
-  const b = { ...(S.meta.board || {}), bg: sc.bg || "", fg: sc.fg || "", fieldW: sc.fieldW || 16, fieldH: sc.fieldH || 9, gridSize: sc.gridSize || 2, displayGrid: !!sc.displayGrid };
-  S.selMarker = "";
-  await update(rp(""), { "meta/board": b, "meta/sceneId": id });
-  await postSystem("シーン「" + (sc.name || "（名前なし）") + "」に切り替えました");
 }
 
 export function renderScenes() {
@@ -218,14 +223,23 @@ export function renderScenes() {
     empty: "シーンはまだありません（room.zip を読み込むと入ります）",
     search: (id, sc) => sc.name || "",
     toggleOnClick: true,
-    onReorder: (ids) => saveOrder("scenes", ids),
+    onReorder: (ids) => saveOrder(scenePath, ids),
+    onOpen: (id) => { S.selScene = S.selScene === id ? "" : id; renderScenes(); renderSceneEditor(); },
     fill: (li, id, sc) => {
       const key = sc.fg || sc.bg || "";
       const go = el("button", "primary", "切替");
       go.type = "button";
       go.addEventListener("click", () => applyScene(id));
-      li.classList.toggle("current", S.meta.sceneId === id);
-      li.append(thumbOf(key), el("span", "lst-name", sc.name || "（名前なし）"), go);
+      const k = sceneTab(sc);
+      li.classList.toggle("current", tabScene(k) === id);
+      li.classList.toggle("picked", S.selScene === id);
+      const name = el("span", "lst-name", sc.name || "（名前なし）");
+      if (k !== "main") {
+        const chip = el("span", "tag-chip tab-chip", tabLabel(k));
+        chip.style.setProperty("--tab-c", tabColor(k) || "var(--accent)");
+        name.append(chip);
+      }
+      li.append(thumbOf(key), name, go);
     }
   });
 }
@@ -240,23 +254,27 @@ export function thumbOf(k) {
   return th;
 }
 
-export function saveOrder(base, ids) {
+export function at(base) {
+  return (id) => base + "/" + id;
+}
+
+export function saveOrder(pathOf, ids) {
   const up = {};
-  ids.forEach((id, i) => { up[id + "/order"] = i; });
-  return update(rp(base), up).catch((e) => setStatus("並べ替えを保存できませんでした: " + e.message, true));
+  ids.forEach((id, i) => { up[pathOf(id) + "/order"] = i; });
+  return update(dbr(""), up).catch((e) => setStatus("並べ替えを保存できませんでした: " + e.message, true));
 }
 
 function listNames(ids, label) {
   return ids.slice(0, 8).map((id) => "・" + label(id)).join("\n") + (ids.length > 8 ? "\n…ほか" + (ids.length - 8) + "件" : "");
 }
 
-async function deleteMany(name, base, ids, label, what, extra) {
+export async function deleteMany(name, pathOf, ids, label, what, extra) {
   if (!confirm(what + " " + ids.length + "件 を削除しますか？\n" + listNames(ids, label))) return false;
   const up = {};
-  ids.forEach((id) => { up[base + "/" + id] = null; });
+  ids.forEach((id) => { up[pathOf(id)] = null; });
   Object.assign(up, extra || {});
   try {
-    await update(rp(""), up);
+    await update(dbr(""), up);
     clearChecked(name);
     return true;
   } catch (e) {
@@ -265,22 +283,24 @@ async function deleteMany(name, base, ids, label, what, extra) {
   }
 }
 
-async function duplicateMany(name, base, objs, ids, tweak) {
+export async function duplicateMany(name, pathOf, objs, ids, tweak) {
   const all = listState(name).ul._all;
   const order = [];
   const made = [];
   const up = {};
   all.forEach((id) => {
-    order.push(id);
+    order.push(pathOf(id));
     if (!ids.includes(id) || !objs[id]) return;
-    const k = push(rp(base)).key;
-    up[k] = tweak ? tweak(JSON.parse(JSON.stringify(objs[id]))) : JSON.parse(JSON.stringify(objs[id]));
-    order.push(k);
+    const parent = pathOf(id).replace(/\/[^/]+$/, "");
+    const k = push(dbr(parent)).key;
+    const np = parent + "/" + k;
+    up[np] = tweak ? tweak(JSON.parse(JSON.stringify(objs[id]))) : JSON.parse(JSON.stringify(objs[id]));
+    order.push(np);
     made.push([id, k]);
   });
-  order.forEach((id, i) => { if (up[id]) up[id].order = i; else up[id + "/order"] = i; });
+  order.forEach((p, i) => { if (up[p]) up[p].order = i; else up[p + "/order"] = i; });
   try {
-    await update(rp(base), up);
+    await update(dbr(""), up);
     const st = listState(name);
     st.checked.clear();
     made.forEach(([, k]) => st.checked.add(k));
@@ -305,7 +325,7 @@ export function renderNotes() {
   renderRows(box, "notes", orderedEntries(S.notes), {
     empty: "テキストはまだありません（room.zip のメモもここに入ります）",
     search: (id, n) => (n.name || "") + " " + (n.text || ""),
-    onReorder: (ids) => saveOrder("notes", ids),
+    onReorder: (ids) => saveOrder(at(R("notes")), ids),
     fill: (li, id, n) => {
       i++;
       const d = el("details", "note acc-color-" + noteColor(n, i));
@@ -349,24 +369,24 @@ function initListBars() {
     placeholder: "検索（シーン名・ID）",
     onChange: renderScenes,
     actions: [
-      { label: "選択を複製", run: (ids) => duplicateMany("scenes", "scenes", S.scenes, ids).then(renderScenes) },
-      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("scenes", "scenes", ids, (id) => (S.scenes[id] && S.scenes[id].name) || "（名前なし）", "シーン", ids.includes(S.meta.sceneId) ? { "meta/sceneId": null } : null) }
+      { label: "選択を複製", run: (ids) => duplicateMany("scenes", scenePath, S.scenes, ids).then(renderScenes) },
+      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("scenes", scenePath, ids, (id) => (S.scenes[id] && S.scenes[id].name) || "（名前なし）", "シーン", clearCurrent(ids)) }
     ]
   });
   initListBar($("noteBar"), "notes", {
     placeholder: "検索（見出し・本文・ID）",
     onChange: renderNotes,
     actions: [
-      { label: "選択を複製", run: (ids) => duplicateMany("notes", "notes", S.notes, ids).then(renderNotes) },
-      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("notes", "notes", ids, (id) => (S.notes[id] && S.notes[id].name) || "（無題）", "テキスト") }
+      { label: "選択を複製", run: (ids) => duplicateMany("notes", at(R("notes")), S.notes, ids).then(renderNotes) },
+      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("notes", at(R("notes")), ids, (id) => (S.notes[id] && S.notes[id].name) || "（無題）", "テキスト") }
     ]
   });
   initListBar($("markerBar"), "markers", {
     placeholder: "検索（文字・クリックアクション・ID）",
     onChange: renderObjLists,
     actions: [
-      { label: "選択を複製", run: (ids) => duplicateMany("markers", objBase("markers"), S.markers, ids, shift).then(renderObjLists) },
-      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("markers", objBase("markers"), ids, (id) => objLabel("markers", S.markers[id] || {}), "マーカーパネル").then((ok) => { if (ok && ids.includes(S.selMarker)) S.selMarker = ""; renderObjLists(); }) }
+      { label: "選択を複製", run: (ids) => duplicateMany("markers", at(objBase("markers")), S.markers, ids, shift).then(renderObjLists) },
+      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("markers", at(objBase("markers")), ids, (id) => objLabel("markers", S.markers[id] || {}), "マーカーパネル").then((ok) => { if (ok && ids.includes(S.selMarker)) S.selMarker = ""; renderObjLists(); }) }
     ]
   });
   const tagAdd = tagSelect("タグを付ける…", true);
@@ -379,8 +399,8 @@ function initListBars() {
       { label: "しまう", title: "選んだパネルを盤面からしまう", run: (ids) => setActive(ids, false) },
       { node: tagAdd },
       { node: tagDel },
-      { label: "選択を複製", run: (ids) => duplicateMany("items", "items", S.items, ids, shift).then((made) => copyTags(made)).then(renderObjLists) },
-      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("items", "items", ids, (id) => objLabel("items", S.items[id] || {}), "スクリーンパネル").then((ok) => { if (ok) { dropTags(ids); if (ids.includes(S.selItem)) S.selItem = ""; } renderObjLists(); }) }
+      { label: "選択を複製", run: (ids) => duplicateMany("items", at(R("items")), S.items, ids, shift).then((made) => copyTags(made)).then(renderObjLists) },
+      { label: "選択を削除", cls: "del", run: (ids) => deleteMany("items", at(R("items")), ids, (id) => objLabel("items", S.items[id] || {}), "スクリーンパネル").then((ok) => { if (ok) { dropTags(ids); if (ids.includes(S.selItem)) S.selItem = ""; } renderObjLists(); }) }
     ]
   });
 }
@@ -421,10 +441,27 @@ export function imagePicker(box, cur, onPick) {
   head.append(up, none);
   const d = el("details", "pick-list");
   d.append(el("summary", "", "部屋の画像から選ぶ（" + S.assets.size + "枚）"));
+  const bar = el("div", "folder-bar pick-folders");
   const grid = el("div", "pick-grid");
   const fill = () => {
-    if (grid.childElementCount) return;
-    [...S.assets.keys()].forEach((k) => {
+    if (S.pickView !== "*" && S.pickView && !kpd("folders")[S.pickView]) S.pickView = "*";
+    bar.replaceChildren();
+    const fs = sortedFolders();
+    bar.hidden = !fs.length;
+    const chip = (k, label, color) => {
+      const b = el("button", "folder-chip" + (S.pickView === k ? " on" : ""), label);
+      b.type = "button";
+      if (color) b.style.setProperty("--fc", color);
+      b.addEventListener("click", () => { S.pickView = k; fill(); });
+      bar.append(b);
+    };
+    chip("*", "すべて");
+    chip("", "未分類");
+    fs.forEach(([k, f]) => chip(k, (S.pickView === k ? "📂" : "📁") + (f.name || ""), f.color));
+    grid.replaceChildren();
+    const list = assetEntries().map(([k]) => k).filter((k) => S.pickView === "*" || folderOf(k) === S.pickView);
+    if (!list.length) grid.append(el("p", "msg", "このフォルダーに画像はありません"));
+    list.forEach((k) => {
       const b = el("button", "pick-item" + (k === cur ? " on" : ""));
       b.type = "button";
       const im = el("img");
@@ -437,25 +474,31 @@ export function imagePicker(box, cur, onPick) {
     });
   };
   d.addEventListener("toggle", () => { if (d.open) fill(); });
-  d.append(grid);
+  d.append(bar, grid);
   if (wasOpen) { d.open = true; fill(); }
   box.append(head, d);
 }
 
 export function saveBoard(key, val) {
-  const up = { ["meta/board/" + key]: val };
+  const up = {};
+  if (stageTab() === "main") up[R("meta/board/" + key)] = val;
   const sid = curSceneId();
-  if (sid) up["scenes/" + sid + "/" + key] = val;
-  return update(rp(""), up).catch((e) => setStatus("保存失敗: " + e.message, true));
+  if (sid) up[scenePath(sid) + "/" + key] = val;
+  if (!Object.keys(up).length) return Promise.resolve();
+  return update(dbr(""), up).catch((e) => setStatus("保存失敗: " + e.message, true));
 }
 
 export function renderBoardPickers() {
   if (!S.isKP) return;
-  const b = S.meta.board || {};
+  const b = viewBoard();
   imagePicker($("bgPick"), b.bg || "", (k) => saveBoard("bg", k || null));
   imagePicker($("fgPick"), b.fg || "", (k) => saveBoard("fg", k || null));
   const sid = curSceneId();
-  $("markerScene").textContent = sid ? "シーン「" + (S.scenes[sid].name || "（名前なし）") + "」のマーカーです（シーンを切り替えると入れ替わります）" : "シーンを選んでいないので、部屋のマーカーです";
+  const st = stageTab();
+  const where = st === "main" ? "" : "（タブ「" + tabName(st) + "」）";
+  $("markerScene").textContent = sid ? "シーン「" + (S.scenes[sid].name || "（名前なし）") + "」" + where + "のマーカーです。チャットウィンドウで開いているタブのシーンが対象です" : "メインのシーンを選んでいないので、部屋のマーカーです";
+  const bs = $("boardScene");
+  if (bs) bs.textContent = sid ? "対象：シーン「" + (S.scenes[sid].name || "（名前なし）") + "」" + where : "対象：メインの盤面（シーンなし）";
 }
 
 export const OBJ_FIELDS = {
@@ -472,7 +515,7 @@ export function renderObjLists() {
   if (!S.isKP) return;
   const byZ = (a, b) => (+b[1].z || 0) - (+a[1].z || 0) || a[0].localeCompare(b[0]);
   [["items", "itemList", "selItem"], ["markers", "markerList", "selMarker"]].forEach(([kind, listId, selKey]) => {
-    const base = objBase(kind);
+    const base = at(objBase(kind));
     renderRows($(listId), kind, orderedEntries(S[kind], byZ), {
       search: (id, o) => (kind === "items" ? (o.memo || "") + " " + tagNames(id).join(" ") : o.text || "") + " " + (o.click || ""),
       filter: kind === "items" && S.tagView ? (id) => !!(kpd("itemTags")[id] || {})[S.tagView] : null,
@@ -515,6 +558,7 @@ export function watchKpData() {
       ensureFolders();
       renderObjLists();
       renderAssetList();
+      renderBoardPickers();
     }, () => { S.kpOff = null; });
   } else if (!S.isKP && S.kpOff) {
     S.kpOff();
@@ -580,6 +624,8 @@ export function renderTagBar() {
   if (!box) return;
   if (S.tagView && !kpd("tags")[S.tagView]) S.tagView = "";
   box.replaceChildren();
+  const edit = isEditing("items");
+  box.hidden = !edit && !sortedTags().length;
   const chip = (k, label, n) => {
     const b = el("button", "tag-filter" + (S.tagView === k ? " on" : ""), label + (n === undefined ? "" : "（" + n + "）"));
     b.type = "button";
@@ -589,6 +635,7 @@ export function renderTagBar() {
   chip("", "すべて");
   const it = kpd("itemTags");
   sortedTags().forEach(([k, v]) => chip(k, "#" + (v.name || ""), Object.keys(S.items).filter((id) => (it[id] || {})[k]).length));
+  if (!edit) { fillTagSelects(); return; }
   const add = el("button", "mini", "＋ タグ");
   add.type = "button";
   add.addEventListener("click", newTag);
@@ -660,7 +707,7 @@ export function renderObjEditor(kind, force) {
   if (!force && box.dataset.id === id && ae && box.contains(ae) && ae.matches("input, textarea, select")) return;
   box.dataset.id = id;
   box.replaceChildren();
-  const save = (patch) => update(rp(objPath(kind, id)), patch).catch((e) => setStatus("保存失敗: " + e.message, true));
+  const save = (patch) => update(dbr(objPath(kind, id)), patch).catch((e) => setStatus("保存失敗: " + e.message, true));
   const pick = el("div", "img-pick");
   imagePicker(pick, o.img || "", (k) => save({ img: k }));
   const f0 = el("div", "field");
@@ -716,7 +763,7 @@ export function renderObjEditor(kind, force) {
   const dup = el("button", "", "複製");
   dup.type = "button";
   dup.addEventListener("click", async () => {
-    const made = await duplicateMany(kind, objBase(kind), S[kind], [id], shift);
+    const made = await duplicateMany(kind, at(objBase(kind)), S[kind], [id], shift);
     if (!made.length) return;
     listState(kind).checked.clear();
     if (kind === "items") { S.selItem = made[0][1]; await copyTags(made); } else S.selMarker = made[0][1];
@@ -726,7 +773,7 @@ export function renderObjEditor(kind, force) {
   del.type = "button";
   del.addEventListener("click", () => {
     if (!confirm("「" + objLabel(kind, o) + "」を削除しますか？")) return;
-    remove(rp(objPath(kind, id)));
+    remove(dbr(objPath(kind, id)));
     if (kind === "items") { S.selItem = ""; dropTags([id]); } else S.selMarker = "";
   });
   const conv = el("button", "", kind === "items" ? "マーカーパネルにする" : "スクリーンパネルにする");
@@ -748,11 +795,11 @@ export async function convertObj(kind, id) {
   const common = { x: o.x || 0, y: o.y || 0, w: o.w || 1, h: o.h || 1, z: o.z || 0, img: o.img || "", click: o.click || "", locked: !!o.locked };
   const nk = toItem ? "items" : "markers";
   const obj = toItem ? { ...common, type: "object", memo: o.text || "", active: true, closed: false, visible: true } : { ...common, text: o.memo || "" };
-  const key = push(rp(objBase(nk))).key;
+  const key = push(dbr(objBase(nk))).key;
   const tail = endOrder(nk, objBase(nk));
   obj.order = tail.order;
   try {
-    await update(rp(""), { ...tail.up, [objPath(nk, key)]: obj, [objPath(kind, id)]: null });
+    await update(dbr(""), { ...tail.up, [objPath(nk, key)]: obj, [objPath(kind, id)]: null });
     if (kind === "items") { S.selItem = ""; dropTags([id]); } else S.selMarker = "";
     selectObj(nk, key);
   } catch (e) {
@@ -771,10 +818,10 @@ function endOrder(name, base) {
 export async function addObj(kind) {
   const base = { ...centerPos(8, 6), w: 8, h: 6, z: 50, img: "", click: "", locked: false };
   const o = kind === "items" ? { ...base, type: "object", memo: "新しいパネル", active: true, closed: false, visible: true } : { ...base, text: "新しいマーカー" };
-  const key = push(rp(objBase(kind))).key;
+  const key = push(dbr(objBase(kind))).key;
   const tail = endOrder(kind, objBase(kind));
   o.order = tail.order;
-  await update(rp(""), { ...tail.up, [objPath(kind, key)]: o });
+  await update(dbr(""), { ...tail.up, [objPath(kind, key)]: o });
   if (kind === "items") S.selItem = key; else S.selMarker = key;
   renderObjLists();
   renderObjEditor(kind, true);
@@ -976,7 +1023,9 @@ function renderFolderBar() {
   chip("*", "すべて");
   chip("", "未分類", "", true);
   sortedFolders().forEach(([k, f]) => chip(k, (S.assetView === k ? "📂" : "📁") + (f.name || ""), f.color, true));
+  const edit = isEditing("assets");
   const add = el("button", "mini", "＋ フォルダー");
+  add.hidden = !edit;
   add.type = "button";
   add.addEventListener("click", async () => {
     const name = (prompt("新しいフォルダーの名前") || "").trim().slice(0, 20);
@@ -989,7 +1038,7 @@ function renderFolderBar() {
   const tools = $("folderTools");
   tools.replaceChildren();
   const f = S.assetView && S.assetView !== "*" ? fs[S.assetView] : null;
-  tools.hidden = !f;
+  tools.hidden = !f || !edit;
   if (f) {
     const k = S.assetView;
     const col = el("input");
@@ -1089,7 +1138,7 @@ export function initAssetList() {
   initListBar($("assetBar"), "assets", {
     placeholder: "検索（ファイル名）",
     unit: "枚",
-    hint: "画像を押すと選択。≡をドラッグで並べ替え、フォルダーの上に落とすとそのフォルダーへ移動（選んだ画像はまとめて動きます）",
+    hint: "画像を押すと選択（チェック欄を上下にドラッグでも）。フォルダーを開くと、色・名前・削除ができます",
     onChange: renderAssetList,
     actions: [
       { node: mv },

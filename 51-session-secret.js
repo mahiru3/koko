@@ -1,6 +1,7 @@
-import { onChildChanged, onChildRemoved, ref, set, update, remove, push, onValue, onChildAdded, query, limitToLast } from "./51-session-fb.js?v=4k";
-import { S, LOG_LIMIT, el, newKey, setStatus } from "./51-session-core.js?v=4k";
-import { chansChanged, renderMessage, rerenderLog, postSystem, tabName, msgChanged, msgRemoved } from "./51-session-chat.js?v=4k";
+import { onChildChanged, onChildRemoved, ref, set, update, remove, push, onValue, onChildAdded, query, limitToLast } from "./51-session-fb.js?v=4l";
+import { S, LOG_LIMIT, el, newKey, setStatus } from "./51-session-core.js?v=4l";
+import { chansChanged, renderMessage, rerenderLog, postSystem, tabName, msgChanged, msgRemoved } from "./51-session-chat.js?v=4l";
+import { watchSecretScenes, releaseScenes, sceneCount } from "./51-session-scene.js?v=4l";
 
 export function sp(path) {
   return ref(S.db, "secrets/" + S.roomId + (path ? "/" + path : ""));
@@ -84,6 +85,7 @@ function mergeDefs() {
   Object.entries(S.sSrc.kp).forEach(([k, v]) => { if (v) out[k] = v; });
   S.sChans = out;
   syncMsgSubs();
+  watchSecretScenes();
   chansChanged();
 }
 
@@ -168,7 +170,7 @@ export async function setOpen(k, on) {
   try {
     await set(sp("chans/" + k + "/open"), on);
     await set(ref(S.db, "rooms/" + S.roomId + "/meta/opened/" + k), on ? true : null);
-    await postSystem("秘匿タブ「" + tabName(k) + "」を" + (on ? "全員に公開しました" : "秘匿に戻しました"));
+    await postSystem("タブ「" + tabName(k) + "」を" + (on ? "全員が見られるようにしました" : "見られる人だけに戻しました"));
   } catch (e) {
     setStatus("保存失敗: " + e.message, true);
   }
@@ -187,13 +189,15 @@ export async function setSecretColor(k, color) {
 
 export async function deleteSecret(k) {
   const name = tabName(k);
-  if (!confirm("秘匿タブ「" + name + "」を削除しますか？\nこのタブの発言も消え、元に戻せません")) return;
+  const n = sceneCount(k);
+  if (!confirm("秘匿タブ「" + name + "」を削除しますか？\nこのタブの発言も消え、元に戻せません" + (n ? "\nこのタブのシーン " + n + "件は、メインのシーンになります" : ""))) return;
   const def = S.sChans[k] || {};
-  const up = { ["chans/" + k]: null, ["msgs/" + k]: null };
+  const up = { ["chans/" + k]: null, ["msgs/" + k]: null, ["sfx/" + k]: null };
   Object.keys(def.members || {}).forEach((pid) => { up["mine/" + pid + "/" + k] = null; });
   try {
+    await releaseScenes(k);
     await update(sp(""), up);
-    await set(ref(S.db, "rooms/" + S.roomId + "/meta/opened/" + k), null);
+    await update(ref(S.db, "rooms/" + S.roomId + "/meta"), { ["opened/" + k]: null, ["hidden/" + k]: null, ["chans/" + k]: null });
   } catch (e) {
     setStatus("削除失敗: " + e.message, true);
   }

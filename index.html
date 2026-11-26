@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>koko</title>
-  <link rel="stylesheet" href="51-session.css?v=4k">
-  <script src="51-session-bcdice.js?v=4k"></script>
-  <script src="51-session-jszip.js?v=4k"></script>
-  <script type="module" src="51-session.js?v=4k"></script>
+  <link rel="stylesheet" href="51-session.css?v=4l">
+  <script src="51-session-bcdice.js?v=4l"></script>
+  <script src="51-session-jszip.js?v=4l"></script>
+  <script type="module" src="51-session.js?v=4l"></script>
 </head>
 <body>
   <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -39,9 +39,18 @@
       <span id="memberCount" class="count"></span>
       <span id="status" class="status"></span>
       <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
+      <span class="sound-wrap">
+        <button id="soundBtn" type="button" class="sound-btn" title="BGM・SEの音量（自分の画面だけ）">🔊</button>
+        <span id="soundHint" class="sound-hint" hidden>画面を一度押すと音が出ます</span>
+        <div id="soundPanel" class="sound-panel" hidden>
+          <label class="vol-row">BGM<input id="volBgm" type="range" min="0" max="100"><span class="check"><input id="muteBgm" type="checkbox">消音</span></label>
+          <label class="vol-row">SE<input id="volSe" type="range" min="0" max="100"><span class="check"><input id="muteSe" type="checkbox">消音</span></label>
+          <p class="msg">自分の画面だけの音量です（カットインの音はSE）</p>
+        </div>
+      </span>
       <button id="themeBtn" type="button" class="theme-btn">ライト</button>
       <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-      <span class="ver">v4k</span>
+      <span class="ver">v4l</span>
     </header>
 
     <section id="boardWrap" class="board-wrap">
@@ -52,6 +61,7 @@
       </div>
     </section>
     <div id="popups" class="popups"></div>
+    <div id="cutins" class="cutins"></div>
     <section id="chatDock" class="chat-dock">
       <div id="chatSplit" class="chat-split" title="ドラッグで高さを変える"></div>
       <div id="chatWin" class="chat-win">
@@ -93,6 +103,7 @@
         <button type="button" data-tab="items">スクパネ</button>
         <button type="button" data-tab="notes">テキスト</button>
         <button type="button" data-tab="scenes">シーン</button>
+        <button type="button" data-tab="fx">演出</button>
       </nav>
 
       <div id="tab-room" class="panel">
@@ -166,6 +177,7 @@
       <div id="tab-scenes" class="panel" hidden>
         <div id="sceneBar"></div>
         <ul id="sceneList" class="plist"></ul>
+        <div id="sceneEditor" class="obj-editor" hidden></div>
         <details class="acc-color-3" open>
           <summary>マーカーパネル（今のシーン）</summary>
           <p id="markerScene" class="msg"></p>
@@ -183,9 +195,37 @@
               <option value="4" selected>×4（ココフォリア相当）</option>
             </select>
           </label>
+          <p id="boardScene" class="msg"></p>
           <label class="check"><input id="gridShow" type="checkbox">グリッドを表示</label>
           <div class="field">背景<div id="bgPick" class="img-pick"></div></div>
           <div class="field">前景（レイヤー1）<div id="fgPick" class="img-pick"></div></div>
+        </details>
+      </div>
+
+      <div id="tab-fx" class="panel" hidden>
+        <div class="row wrap"><button id="soundReload" type="button">音の一覧を読み直す</button><span id="soundListMsg" class="msg"></span></div>
+        <p class="msg">音は GitHub の sound フォルダーに mp3 を上げると一覧に出ます。発言（チャパレ・クリックアクションも）に名前が入ると発動します</p>
+        <details class="acc-color-1" data-keep="fxcut" open>
+          <summary>カットイン</summary>
+          <div class="row wrap"><button id="cutAdd" type="button" class="primary">カットインを追加</button></div>
+          <div id="cutBar"></div>
+          <ul id="cutList" class="plist compact"></ul>
+          <div id="cutEditor" class="obj-editor" hidden></div>
+        </details>
+        <details class="acc-color-2" data-keep="fxbgm" open>
+          <summary>BGM</summary>
+          <div id="bgmNow" class="bgm-now-box"></div>
+          <div class="row wrap"><button id="bgmAdd" type="button" class="primary">BGMを追加</button></div>
+          <div id="bgmBar"></div>
+          <ul id="bgmList" class="plist compact"></ul>
+          <div id="bgmEditor" class="obj-editor" hidden></div>
+        </details>
+        <details class="acc-color-3" data-keep="fxse" open>
+          <summary>SE（効果音）</summary>
+          <div class="row wrap"><button id="seAdd" type="button" class="primary">SEを追加</button></div>
+          <div id="seBar"></div>
+          <ul id="seList" class="plist compact"></ul>
+          <div id="seEditor" class="obj-editor" hidden></div>
         </details>
       </div>
     </aside>

@@ -1838,14 +1838,6 @@ body.booted .boot-warn {
   left: 4px;
 }
 
-.asset-card .lst-grip {
-  position: absolute;
-  top: 4px;
-  left: 26px;
-  padding: 0 4px;
-  border-radius: 4px;
-  background: var(--panel);
-}
 
 .asset-card img {
   width: 100%;
@@ -1934,14 +1926,22 @@ body.booted .boot-warn {
   pointer-events: none;
 }
 
-.lst-item .lst-grip,
-.plist li .lst-grip {
-  flex: none;
-  padding: 0 2px;
-  color: var(--sub);
-  cursor: grab;
-  user-select: none;
-  touch-action: none;
+.lst:not(.editing) .lst-chk {
+  display: none !important;
+}
+
+.lst-bar:not(.editing) .lst-edit-only {
+  display: none;
+}
+
+.lst-edit.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.pick-folders {
+  margin: 4px 0;
 }
 
 .plist li .lst-name {
@@ -2055,6 +2055,159 @@ body.lst-moving {
 .asset-move {
   max-width: 150px;
   font-size: 12px;
+}
+
+.kp-side .panel > * {
+  flex-shrink: 0;
+}
+
+.sound-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sound-btn {
+  padding: 2px 8px;
+}
+
+.sound-hint {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--crit);
+  color: #000;
+  font-size: 11px;
+}
+
+.sound-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 260px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+
+.vol-row {
+  display: grid;
+  grid-template-columns: 34px 1fr auto;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.vol-row .check {
+  font-size: 11px;
+}
+
+.cutins {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.cutin {
+  grid-area: 1 / 1;
+  max-width: 80vw;
+  max-height: 80vh;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.cutin.show {
+  opacity: 1;
+  transform: none;
+}
+
+.cutin img {
+  display: block;
+  max-width: 80vw;
+  max-height: 80vh;
+  object-fit: contain;
+}
+
+.cutin-name {
+  padding: 16px 28px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.bgm-now-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.bgm-now {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--panel2);
+  font-size: 12px;
+}
+
+.bgm-slot {
+  color: var(--sub);
+}
+
+.bgm-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plist li .tag-chip.warn {
+  border-color: var(--ng);
+  color: var(--ng);
+}
+
+.plist li .tag-chip.on {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.plist li .tag-chip.tab-chip {
+  border-color: var(--tab-c);
+  color: var(--tab-c);
+}
+
+.plist li.picked {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.sec-members.dim {
+  opacity: 0.5;
+}
+
+.sound-pick {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.sound-pick select {
+  flex: 1;
+  min-width: 0;
 }
 
 @media (min-width: 801px) {

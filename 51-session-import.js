@@ -148,9 +148,9 @@ export async function readRoomZip(file, onProgress) {
     effects[assetKey(k)] = {
       name: String(f.name || "").slice(0, 60),
       img: ref(f.imageUrl),
-      sound: String(f.soundRef || f.soundUrl || "").slice(0, 300),
-      playtime: +f.playtime || 0,
-      volume: +f.volume || 0,
+      sound: String(f.soundRef || f.soundUrl || "").split("?")[0].split("/").pop().slice(0, 200),
+      playtime: +f.playtime || 3000,
+      volume: f.volume === undefined || f.volume === null ? 100 : +f.volume <= 1 ? Math.round(+f.volume * 100) : Math.min(100, Math.round(+f.volume)),
       order: +f.order || 0
     };
   });

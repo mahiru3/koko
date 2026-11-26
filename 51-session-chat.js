@@ -1,12 +1,14 @@
-import { onChildChanged, onChildRemoved, ref, remove, push, set, update, onValue, onChildAdded, query, limitToLast, serverTimestamp } from "./51-session-fb.js?v=4k";
-import { expandVars } from "./51-session-palette.js?v=4k";
-import { assetKey, normLabel } from "./51-session-import.js?v=4k";
-import { $, LOG_LIMIT, CH_TABS, CHECK_RE, S, visibleChar, isStand, canEdit, el, setStatus, faceList, charIcon, src, rp, sorted, isPc, speakerChar } from "./51-session-core.js?v=4k";
-import { showTab } from "./51-session-layout.js?v=4k";
-import { queueRender } from "./51-session-board.js?v=4k";
-import { buildPlaceOptions, renderPalFace, renderPaletteTabs, setPalPlace, renderPalDest } from "./51-session-pal.js?v=4k";
-import { renderChanList, addChan, renameChan, deleteChan, applyScene } from "./51-session-kp.js?v=4k";
-import { addSecretChan, initSecrets, isOpen, isSecret, openSdice, sdiceOf, secretList, sendSecretDice, watchSdice } from "./51-session-secret.js?v=4k";
+import { onChildChanged, onChildRemoved, ref, remove, push, set, update, onValue, onChildAdded, query, limitToLast, serverTimestamp } from "./51-session-fb.js?v=4l";
+import { expandVars } from "./51-session-palette.js?v=4l";
+import { assetKey, normLabel } from "./51-session-import.js?v=4l";
+import { $, LOG_LIMIT, CH_TABS, CHECK_RE, S, visibleChar, isStand, canEdit, el, setStatus, faceList, charIcon, src, rp, sorted, isPc, speakerChar } from "./51-session-core.js?v=4l";
+import { showTab } from "./51-session-layout.js?v=4l";
+import { queueRender } from "./51-session-board.js?v=4l";
+import { buildPlaceOptions, renderPalFace, renderPaletteTabs, setPalPlace, renderPalDest } from "./51-session-pal.js?v=4l";
+import { renderChanList, addChan, renameChan, deleteChan } from "./51-session-kp.js?v=4l";
+import { applyScene, stageCheck } from "./51-session-scene.js?v=4l";
+import { fireTriggers } from "./51-session-sound.js?v=4l";
+import { addSecretChan, initSecrets, isOpen, isSecret, openSdice, sdiceOf, secretList, sendSecretDice, watchSdice } from "./51-session-secret.js?v=4l";
 
 export function lookupVars(c) {
   const v = {};
@@ -77,11 +79,13 @@ export function setChatH(h) {
 }
 
 export function chans() {
+  const hidden = (S.meta && S.meta.hidden) || {};
+  const pub = (k) => k === "main" || (!hidden[k] && !isSecret(k));
   const custom = Object.entries((S.meta && S.meta.chans) || {})
-    .filter(([, c]) => c && c.name)
+    .filter(([k, c]) => c && c.name && pub(k))
     .sort((a, b) => (a[1].t || 0) - (b[1].t || 0) || a[0].localeCompare(b[0]))
     .map(([k, c]) => [k, String(c.name)]);
-  return CH_TABS.concat(custom, S.sChans ? secretList() : []);
+  return CH_TABS.filter(([k]) => pub(k)).concat(custom, S.sChans ? secretList() : []);
 }
 
 export function tabLabel(k) {
@@ -214,6 +218,7 @@ export function chansChanged() {
   buildChatTabs();
   buildPlaceOptions();
   renderChanList();
+  stageCheck(true);
 }
 
 export function buildChatTabs() {
@@ -370,6 +375,7 @@ export function switchChatTab(k) {
   log.replaceChildren();
   S.msgs.filter((m) => tabOf(m) === k).forEach((m) => log.append(messageNode(m)));
   scrollLog(true);
+  stageCheck();
 }
 
 export function renderChatTabs() {
@@ -591,13 +597,17 @@ export function resultClass(r) {
   return "";
 }
 
-export async function postSystem(text) {
-  await push(rp("messages"), { uid: S.uid, name: "system", color: "#888888", text: text.slice(0, 2000), sys: true, tab: "main", t: serverTimestamp() });
+export async function postSystem(text, tab) {
+  const k = tab && tab !== "main" && isChan(tab) ? tab : "main";
+  const msg = { uid: S.uid, name: "system", color: "#888888", text: text.slice(0, 2000), sys: true, tab: k, t: serverTimestamp() };
+  await push(isSecret(k) ? ref(S.db, "secrets/" + S.roomId + "/msgs/" + k) : rp("messages"), msg);
 }
 
 export async function sendChat(rawText, charId0, place) {
   const charId = S.chars[charId0] && canEdit(S.chars[charId0]) ? charId0 : "";
   const c = S.chars[charId] || null;
+  const tab = isChan(place) ? place : isChan(S.chatTab) ? S.chatTab : "main";
+  if (!/^\s*[/:]/.test(rawText)) fireTriggers(rawText, tab);
   let text = rawText;
   let icon = charIcon(c);
   if (c) {
@@ -636,8 +646,9 @@ export async function sendChat(rawText, charId0, place) {
   if (/^\/scene(\s|$)/.test(first)) {
     if (!S.isKP) { setStatus("シーンの切替はKPとKP権限の人だけができます", true); return; }
     const name = first.replace(/^\/scene\s*/, "").trim();
-    const hit = Object.entries(S.scenes).find(([, s]) => (s.name || "") === name);
-    if (!hit) { await postSystem("シーン「" + name + "」が見つかりません"); return; }
+    const same = Object.entries(S.scenes).filter(([, s]) => (s.name || "") === name);
+    const hit = same.find(([, s]) => ((s && s.tab) || "main") === tab) || same[0];
+    if (!hit) { await postSystem("シーン「" + name + "」が見つかりません", tab); return; }
     await applyScene(hit[0]);
     return;
   }
@@ -654,7 +665,6 @@ export async function sendChat(rawText, charId0, place) {
     return;
   }
 
-  const tab = isChan(place) ? place : isChan(S.chatTab) ? S.chatTab : "main";
   const dest = isSecret(tab) ? "secrets/" + S.roomId + "/msgs/" + tab : "rooms/" + S.roomId + "/messages";
   const msg = {
     uid: S.uid,
