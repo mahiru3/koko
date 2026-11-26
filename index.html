@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>koko</title>
-<link rel="stylesheet" href="51-session.css?v=4e">
-<script src="51-session-bcdice.js?v=4e"></script>
-<script src="51-session-jszip.js?v=4e"></script>
-<script type="module" src="51-session.js?v=4e"></script>
+<link rel="stylesheet" href="51-session.css?v=4f">
+<script src="51-session-bcdice.js?v=4f"></script>
+<script src="51-session-jszip.js?v=4f"></script>
+<script type="module" src="51-session.js?v=4f"></script>
 </head>
 <body>
 <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -41,7 +41,7 @@
     <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
     <button id="themeBtn" type="button" class="theme-btn">ライト</button>
     <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-    <span class="ver">v4e</span>
+    <span class="ver">v4f</span>
   </header>
 
   <section id="boardWrap" class="board-wrap">
@@ -128,6 +128,12 @@
         <label class="field">「CT使用」で次の判定1回に足す値<input id="ctBonus" type="number" min="1" max="99" inputmode="numeric"></label>
         <p class="msg">PLが「CT使用」を押すと、発言キャラのステータス「CT」が1減り、次のCCB判定の目標値にこの値が足されます</p>
       </details>
+      <details class="acc-color-3">
+        <summary>チャットのタブ</summary>
+        <ul id="chanList" class="mlist"></ul>
+        <div class="row wrap"><button id="chanAdd2" type="button">タブを追加</button></div>
+        <p class="msg">色はチャットウィンドウのタブと、PLパレットの発言場所のボタンに付きます</p>
+      </details>
       <details class="acc-color-1">
         <summary>ルーム変数</summary>
         <ul id="varList" class="mlist"></ul>
@@ -171,14 +177,14 @@
         <div id="palChars" class="char-bar"></div>
         <div id="palStatus" class="my-status" hidden></div>
       </details>
-      <label class="pal-place">発言場所
-        <select id="palPlace">
-          <option value="">未指定（チャットウィンドウで開いているタブ）</option>
-          <option value="main">メイン</option>
-          <option value="info">情報</option>
-          <option value="talk">雑談</option>
-        </select>
-      </label>
+      <div class="pal-head">
+        <button id="palFace" type="button" class="pal-face" title="押すと表情（差分）を選べます"></button>
+        <div class="pal-place">
+          <span class="pal-place-title">発言場所</span>
+          <div id="palPlaceBtns" class="place-btns"></div>
+        </div>
+      </div>
+      <div id="palFaceList" class="faces pal-faces" hidden></div>
       <div class="send">
         <textarea id="palInput" rows="2" placeholder="行を選ぶとここに入ります（ダブルクリックですぐ送信）"></textarea>
         <button id="palSend" type="button" class="primary">送信</button>

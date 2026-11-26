@@ -120,7 +120,7 @@ export async function readRoomZip(file, onProgress) {
       x: +it.x || 0, y: +it.y || 0, z: +it.z || 0,
       w: +it.width || 1, h: +it.height || 1,
       img: ref(it.imageUrl), cover: ref(it.coverImageUrl),
-      closed: !!it.closed, visible: it.visible !== false && it.active !== false,
+      active: it.active !== false, closed: !!it.closed, visible: it.visible !== false,
       memo: it.memo || "", click: click(it.clickAction),
       locked: !!(it.locked || it.freezed)
     };
@@ -143,6 +143,18 @@ export async function readRoomZip(file, onProgress) {
     notes[assetKey(k)] = { name: n.name || "", text: n.text || "", order: +n.order || 0 };
   });
 
+  const effects = {};
+  Object.entries(e.effects || {}).forEach(([k, f]) => {
+    effects[assetKey(k)] = {
+      name: String(f.name || "").slice(0, 60),
+      img: ref(f.imageUrl),
+      sound: String(f.soundRef || f.soundUrl || "").slice(0, 300),
+      playtime: +f.playtime || 0,
+      volume: +f.volume || 0,
+      order: +f.order || 0
+    };
+  });
+
   const vars = {};
   (room.variables || []).forEach((v) => { if (v && v.label) vars[assetKey(v.label)] = String(v.value ?? ""); });
 
@@ -155,7 +167,7 @@ export async function readRoomZip(file, onProgress) {
 
   const usesCCB = JSON.stringify(e.characters || {}).includes("CCB") || JSON.stringify(e.items || {}).includes("CCB");
 
-  return { assets, chars, items, markers: markers(room.markers), scenes, notes, vars, board, usesCCB };
+  return { assets, chars, items, markers: markers(room.markers), scenes, notes, effects, vars, board, usesCCB };
 }
 
 function looseParse(text) {

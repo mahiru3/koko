@@ -1,5 +1,5 @@
 {
-  // koko rules v4b 2026-11-25
+  // koko rules v4f 2026-11-26
   "rules": {
     "rooms": {
       "$room": {
@@ -47,6 +47,9 @@
           ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
         },
         "notes": {
+          ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
+        },
+        "effects": {
           ".write": "(auth != null && (root.child('rooms/' + $room + '/meta/owner').val() === root.child('links/' + auth.uid + '/pid').val() || root.child('rooms/' + $room + '/meta/kps/' + root.child('links/' + auth.uid + '/pid').val()).val() === true))"
         },
         "players": {

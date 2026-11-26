@@ -1,12 +1,12 @@
-import { firebaseConfig } from "./51-session-config.js?v=4e";
+import { firebaseConfig } from "./51-session-config.js?v=4f";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, onChildAdded,
   onChildRemoved, query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
-} from "./51-session-fb.js?v=4e";
-import { parseTekeyJson, renderPalette, expandVars, moveLine } from "./51-session-palette.js?v=4e";
-import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4e";
-import { ensureProfile } from "./51-session-id.js?v=4e";
+} from "./51-session-fb.js?v=4f";
+import { parseTekeyJson, renderPalette, expandVars, moveLine } from "./51-session-palette.js?v=4f";
+import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4f";
+import { ensureProfile } from "./51-session-id.js?v=4f";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -602,6 +602,8 @@ function initChat() {
 function initChatDock() {
   try { S.colOrder = JSON.parse(localStorage.getItem("s51-cols") || "[]"); } catch (e) { S.colOrder = []; }
   $("chanAdd").addEventListener("click", addChan);
+  $("chanAdd2").addEventListener("click", addChan);
+  $("palFace").addEventListener("click", () => { $("palFaceList").hidden = !$("palFaceList").hidden; renderPalFace(); });
   initChatTools();
   S.popPc = localStorage.getItem("s51-popup") === "1";
   $("popToggle").checked = S.popPc;
@@ -654,13 +656,14 @@ function colKeys() {
 }
 
 function chansChanged() {
-  const sig = JSON.stringify([chans(), S.isKP]);
+  const sig = JSON.stringify([chans(), S.isKP, (S.meta && S.meta.tabColors) || {}]);
   if (sig === S.chanSig) return;
   S.chanSig = sig;
   if (!isChan(S.chatTab)) S.chatTab = "main";
   $("chanAdd").hidden = !S.isKP;
   buildChatTabs();
   buildPlaceOptions();
+  renderChanList();
 }
 
 function buildChatTabs() {
@@ -672,6 +675,7 @@ function buildChatTabs() {
     b.type = "button";
     b.dataset.ch = k;
     b.addEventListener("click", () => switchChatTab(k));
+    paintTab(b, k);
     if (k === "main") {
       b.title = "メイン（左端に固定）";
     } else {
@@ -711,17 +715,140 @@ function buildChatTabs() {
   if ($("log").dataset.ch !== S.chatTab) switchChatTab(S.chatTab);
 }
 
+function tabColor(k) {
+  const v = S.meta && S.meta.tabColors && S.meta.tabColors[k];
+  return /^#[0-9a-f]{6}$/i.test(v || "") ? v : "";
+}
+
+function paintTab(b, k) {
+  const c = tabColor(k);
+  b.style.setProperty("--tab-c", c || "var(--accent)");
+  b.classList.toggle("colored", !!c);
+}
+
 function buildPlaceOptions() {
-  const sel = $("palPlace");
-  const v = sel.value;
-  sel.replaceChildren();
-  const none = el("option", "", "未指定（チャットウィンドウで開いているタブ）");
-  none.value = "";
-  sel.append(none);
-  colKeys().forEach((k) => { const o = el("option", "", tabName(k)); o.value = k; sel.append(o); });
-  sel.value = v;
-  S.palSig = "";
-  renderPaletteTabs();
+  const box = $("palPlaceBtns");
+  if (!box) return;
+  box.replaceChildren();
+  const cur = curPalette();
+  const now = cur ? cur.place || "" : "";
+  let drag = "";
+  [""].concat(colKeys()).forEach((k) => {
+    const b = el("button", "place-btn" + ((isChan(now) ? now : "") === k ? " on" : ""), k ? tabName(k) : "未指定");
+    b.type = "button";
+    b.dataset.ch = k;
+    b.title = k ? tabName(k) + "に送る" : "チャットウィンドウで開いているタブに送る";
+    b.disabled = !cur;
+    if (k) paintTab(b, k);
+    b.addEventListener("click", () => setPalPlace(k));
+    if (k && k !== "main" && isPc()) {
+      b.draggable = true;
+      b.addEventListener("dragstart", (e) => { drag = k; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", k); });
+      b.addEventListener("dragend", () => { drag = ""; });
+    }
+    b.addEventListener("dragover", (e) => { if (drag && k && k !== "main" && drag !== k) { e.preventDefault(); b.classList.add("drop"); } });
+    b.addEventListener("dragleave", () => b.classList.remove("drop"));
+    b.addEventListener("drop", (e) => {
+      e.preventDefault();
+      b.classList.remove("drop");
+      if (!drag || !k || k === "main" || drag === k) return;
+      moveChanOrder(drag, k);
+      drag = "";
+    });
+    box.append(b);
+  });
+}
+
+function moveChanOrder(from, to) {
+  S.colOrder = colKeys();
+  const a = S.colOrder.indexOf(from);
+  const t = S.colOrder.indexOf(to);
+  if (a < 0 || t < 0) return;
+  S.colOrder.splice(a, 1);
+  S.colOrder.splice(t, 0, from);
+  localStorage.setItem("s51-cols", JSON.stringify(S.colOrder));
+  buildChatTabs();
+  buildPlaceOptions();
+}
+
+function setPalPlace(k) {
+  const cur = curPalette();
+  if (!cur) return;
+  const p = S.palettes.find((x) => x.id === cur.id);
+  if (p) { p.place = k; savePalettes(); } else { S.palPlace[cur.id] = k; savePalPlace(); }
+  buildPlaceOptions();
+}
+
+function renderPalFace() {
+  const btn = $("palFace");
+  if (!btn) return;
+  const c = speakerChar();
+  btn.replaceChildren();
+  const icon = c ? charIcon(c) : "";
+  if (icon) {
+    const im = el("img");
+    im.alt = "";
+    im.dataset.asset = icon;
+    im.src = src(icon);
+    btn.append(im);
+  } else {
+    const f = el("span", "cb-fb", ((c ? c.name : S.name) || "?").slice(0, 1));
+    f.style.background = (c ? c.color : S.color) || "#888";
+    btn.append(f);
+  }
+  const list = c ? faceList(c).filter((f) => f.label) : [];
+  btn.append(el("span", "pal-face-name", c ? (c.face || (list.length ? "表情" : c.name || "")) : S.name || ""));
+  btn.disabled = !list.length || !canEdit(c);
+  btn.title = list.length ? "押すと表情（差分）を選べます" : "このキャラには差分がありません";
+  const box = $("palFaceList");
+  if (box.hidden) return;
+  box.replaceChildren();
+  list.forEach((fc) => {
+    const b = el("button", "face-btn" + (c.face === fc.label ? " on" : ""));
+    b.type = "button";
+    const im = el("img");
+    im.alt = "";
+    im.dataset.asset = fc.key || "";
+    im.src = src(fc.key);
+    b.append(im, el("span", "", fc.label));
+    b.addEventListener("click", () => {
+      update(rp("chars/" + S.speaker), { face: fc.label }).catch((e) => setStatus("保存失敗: " + e.message, true));
+      box.hidden = true;
+    });
+    box.append(b);
+  });
+  if (!list.length) box.hidden = true;
+}
+
+function renderChanList() {
+  const ul = $("chanList");
+  if (!ul || !S.isKP) return;
+  if (ul.contains(document.activeElement) && document.activeElement.matches("input")) return;
+  ul.replaceChildren();
+  colKeys().forEach((k) => {
+    const li = el("li", "chan-row");
+    const name = el("span", "chan-name", tabName(k));
+    const col = el("input");
+    col.type = "color";
+    col.value = tabColor(k) || "#4a90d9";
+    col.title = "タブの色";
+    col.addEventListener("change", () => set(rp("meta/tabColors/" + k), col.value));
+    const clr = el("button", "mini", "色なし");
+    clr.type = "button";
+    clr.hidden = !tabColor(k);
+    clr.addEventListener("click", () => set(rp("meta/tabColors/" + k), null));
+    li.append(name, col, clr);
+    if (!CH_TABS.some(([x]) => x === k)) {
+      const rn = el("button", "mini", "名前");
+      rn.type = "button";
+      rn.addEventListener("click", () => renameChan(k));
+      const dl = el("button", "mini del", "削除");
+      dl.type = "button";
+      dl.addEventListener("click", () => deleteChan(k));
+      li.append(rn, dl);
+    }
+    ul.append(li);
+  });
 }
 
 async function addChan() {
@@ -987,6 +1114,7 @@ function renderSpeaker() {
   renderMyStatus();
   renderBonus();
   renderChatWho();
+  renderPalFace();
 }
 
 async function submit(raw) {
@@ -1343,7 +1471,7 @@ function queueRender() {
 
 function boardObjects() {
   const list = [];
-  Object.entries(S.items).forEach(([id, o]) => { if (o.visible !== false || S.isKP) list.push({ kind: "items", id, o }); });
+  Object.entries(S.items).forEach(([id, o]) => { if (o.active !== false && (o.visible !== false || S.isKP)) list.push({ kind: "items", id, o }); });
   Object.entries(S.markers).forEach(([id, o]) => list.push({ kind: "markers", id, o }));
   Object.entries(S.chars).forEach(([id, o]) => { if (o.active !== false && visibleChar(o)) list.push({ kind: "chars", id, o }); });
   return list;
@@ -1428,7 +1556,9 @@ function drawObject({ kind, id, o }) {
   node.classList.toggle("clickable", !!o.click);
   node.title = kind === "markers" ? (o.text || "") : (o.memo || "");
   const img = node.querySelector(".obj-img");
-  const s = src(kind === "items" && o.closed ? o.cover : (kind === "chars" ? charIcon(o) : o.img));
+  const back = kind === "items" && !!o.closed && o.visible !== false;
+  node.classList.toggle("back-blank", back && !o.cover);
+  const s = src(back ? o.cover : (kind === "chars" ? charIcon(o) : o.img));
   if (img.getAttribute("src") !== s) { if (s) img.src = s; else img.removeAttribute("src"); }
   img.hidden = !s;
   if (kind === "chars") {
@@ -1670,7 +1800,7 @@ function renderBoardPickers() {
 }
 
 const OBJ_FIELDS = {
-  items: [["memo", "名前（メモ）", "text"], ["x", "X", "num"], ["y", "Y", "num"], ["w", "幅", "num"], ["h", "高さ", "num"], ["z", "レイヤー", "z"], ["click", "クリックアクション（クリックで発言する文字）", "area"], ["locked", "固定（動かせなくする）", "check"], ["visible", "表示する", "check"]],
+  items: [["memo", "名前（メモ）", "text"], ["x", "X", "num"], ["y", "Y", "num"], ["w", "幅", "num"], ["h", "高さ", "num"], ["z", "レイヤー", "z"], ["click", "クリックアクション（クリックで発言する文字）", "area"], ["locked", "固定（動かせなくする）", "check"]],
   markers: [["text", "文字", "area"], ["x", "X", "num"], ["y", "Y", "num"], ["w", "幅", "num"], ["h", "高さ", "num"], ["z", "レイヤー", "z"], ["click", "クリックアクション（クリックで発言する文字）", "area"], ["locked", "固定（動かせなくする）", "check"]]
 };
 
@@ -1686,13 +1816,25 @@ function renderObjLists() {
     list.replaceChildren();
     Object.entries(S[kind]).sort((a, b) => (+b[1].z || 0) - (+a[1].z || 0)).forEach(([id, o]) => {
       const li = el("li", id === S[selKey] ? "current" : "");
-      const th = el("img", "thumb");
-      th.alt = "";
-      th.dataset.asset = o.img || "";
-      th.src = src(o.img);
-      th.hidden = !th.src;
-      const tags = (o.locked ? "（固定）" : "") + (o.visible === false ? "（非表示）" : "");
-      li.append(th, el("span", "", objLabel(kind, o) + tags), el("span", "z-tag", "L" + Math.round(+o.z || 0)));
+      const thumb = (k) => {
+        const u = src(k);
+        if (!u) return el("span", "thumb thumb-none", "なし");
+        const th = el("img", "thumb");
+        th.alt = "";
+        th.dataset.asset = k;
+        th.src = u;
+        return th;
+      };
+      const tags = kind === "items" ? itemTags(o) : (o.locked ? "（固定）" : "");
+      if (kind === "items") {
+        const pair = el("span", "thumb-pair");
+        pair.append(thumb(o.img), thumb(o.cover));
+        li.append(pair);
+        li.classList.toggle("put-away", o.active === false);
+      } else {
+        li.append(thumb(o.img));
+      }
+      li.append(el("span", "", objLabel(kind, o) + tags), el("span", "z-tag", "L" + Math.round(+o.z || 0)));
       li.addEventListener("click", () => { S[selKey] = id === S[selKey] ? "" : id; renderObjLists(); renderObjEditor(kind, true); });
       list.append(li);
     });
@@ -1700,6 +1842,28 @@ function renderObjLists() {
   });
   renderObjEditor("items");
   renderObjEditor("markers");
+}
+
+function itemTags(o) {
+  return (o.active === false ? "（しまってある）" : "") + (o.visible === false ? "（両方非表示）" : o.closed ? "（背）" : "") + (o.locked ? "（固定）" : "");
+}
+
+function itemFace(o) {
+  return o.visible === false ? "none" : o.closed ? "back" : "front";
+}
+
+function segRow(label, opts, cur, onPick) {
+  const row = el("div", "seg-row");
+  row.append(el("span", "seg-label", label));
+  const g = el("div", "seg");
+  opts.forEach(([v, t]) => {
+    const b = el("button", v === cur ? "on" : "", t);
+    b.type = "button";
+    b.addEventListener("click", () => onPick(v));
+    g.append(b);
+  });
+  row.append(g);
+  return row;
 }
 
 function renderObjEditor(kind, force) {
@@ -1716,15 +1880,27 @@ function renderObjEditor(kind, force) {
   const pick = el("div", "img-pick");
   imagePicker(pick, o.img || "", (k) => save({ img: k }));
   const f0 = el("div", "field");
-  f0.append(el("span", "", "画像"), pick);
-  box.append(f0);
+  f0.append(el("span", "", kind === "items" ? "表の画像" : "画像"), pick);
+  if (kind === "items") {
+    const pair = el("div", "img-pair");
+    const pick2 = el("div", "img-pick");
+    imagePicker(pick2, o.cover || "", (k) => save({ cover: k || null }));
+    const f1 = el("div", "field");
+    f1.append(el("span", "", "背の画像"), pick2);
+    pair.append(f0, f1);
+    box.append(pair);
+    box.append(segRow("盤面", [["on", "出す"], ["off", "しまう"]], o.active === false ? "off" : "on", (v) => save({ active: v === "on" })));
+    box.append(segRow("見せ方", [["front", "表"], ["back", "背"], ["none", "両方非表示"]], itemFace(o), (v) => save(v === "front" ? { closed: false, visible: true } : v === "back" ? { closed: true, visible: true } : { closed: false, visible: false })));
+  } else {
+    box.append(f0);
+  }
   const grid = el("div", "obj-grid");
   OBJ_FIELDS[kind].forEach(([key, label, type]) => {
     if (type === "check") {
       const lab = el("label", "check");
       const cb = el("input");
       cb.type = "checkbox";
-      cb.checked = key === "visible" ? o.visible !== false : !!o[key];
+      cb.checked = !!o[key];
       cb.addEventListener("change", () => save({ [key]: cb.checked }));
       lab.append(cb, document.createTextNode(label));
       box.append(lab);
@@ -1748,7 +1924,7 @@ function renderObjEditor(kind, force) {
     lab.append(inp);
     (type === "num" || type === "z" ? grid : box).append(lab);
   });
-  box.insertBefore(grid, box.children[1]);
+  box.insertBefore(grid, box.children[kind === "items" ? 3 : 1]);
   const row = el("div", "row wrap");
   const center = el("button", "", "盤面の中央へ");
   center.type = "button";
@@ -1773,7 +1949,7 @@ function renderObjEditor(kind, force) {
 
 async function addObj(kind) {
   const base = { ...centerPos(8, 6), w: 8, h: 6, z: 50, img: "", click: "", locked: false };
-  const o = kind === "items" ? { ...base, type: "object", memo: "新しいパネル", visible: true } : { ...base, text: "新しいマーカー" };
+  const o = kind === "items" ? { ...base, type: "object", memo: "新しいパネル", active: true, closed: false, visible: true } : { ...base, text: "新しいマーカー" };
   const r = await push(rp(kind), o);
   if (kind === "items") S.selItem = r.key; else S.selMarker = r.key;
   renderObjLists();
@@ -2276,11 +2452,6 @@ function initPalettes() {
   bindEdit("palLabel", "label");
   bindEdit("palName", "name");
   bindEdit("palStock", "stock");
-  $("palPlace").addEventListener("change", () => {
-    const v = $("palPlace").value;
-    const p = S.palettes.find((x) => x.id === S.palSel);
-    if (p) { p.place = v; savePalettes(); } else { S.palPlace[S.palSel] = v; savePalPlace(); }
-  });
   $("palSend").addEventListener("click", () => sendPalInput());
   $("palInput").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendPalInput(); }
@@ -2355,8 +2526,7 @@ function renderPaletteTabs() {
   const editable = cur && cur.local;
   $("palEdit").disabled = !editable;
   $("palDel").disabled = !editable;
-  $("palPlace").disabled = !cur;
-  if (document.activeElement !== $("palPlace")) $("palPlace").value = cur ? cur.place || "" : "";
+  buildPlaceOptions();
   if (!editable) $("palEditor").hidden = true;
   if (editable && !$("palEditor").hidden) {
     if (document.activeElement !== $("palLabel")) $("palLabel").value = cur.label;
@@ -2486,6 +2656,7 @@ async function importZip(e) {
     put("markers", data.markers);
     put("scenes", data.scenes);
     put("notes", data.notes);
+  put("effects", data.effects);
     up["meta/board"] = data.board;
     up["meta/sceneId"] = null;
     if (Object.keys(data.vars).length) {
@@ -2496,7 +2667,7 @@ async function importZip(e) {
     await update(rp(""), up);
     S.fitted = false;
     queueRender();
-    msg.textContent = "読み込み完了：キャラ" + Object.keys(data.chars).length + "・パネル" + Object.keys(data.items).length + "・シーン" + Object.keys(data.scenes).length + "・メモ" + Object.keys(data.notes).length + "・画像" + keys.length;
+    msg.textContent = "読み込み完了：キャラ" + Object.keys(data.chars).length + "・パネル" + Object.keys(data.items).length + "・シーン" + Object.keys(data.scenes).length + "・メモ" + Object.keys(data.notes).length + "・カットイン" + Object.keys(data.effects).length + "・画像" + keys.length;
     await postSystem(S.name + " が room.zip を読み込みました");
   } catch (err) {
     msg.textContent = "読み込みに失敗しました: " + err.message;
