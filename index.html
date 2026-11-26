@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>koko</title>
-<link rel="stylesheet" href="51-session.css?v=4d">
-<script src="51-session-bcdice.js?v=4d"></script>
-<script src="51-session-jszip.js?v=4d"></script>
-<script type="module" src="51-session.js?v=4d"></script>
+<link rel="stylesheet" href="51-session.css?v=4e">
+<script src="51-session-bcdice.js?v=4e"></script>
+<script src="51-session-jszip.js?v=4e"></script>
+<script type="module" src="51-session.js?v=4e"></script>
 </head>
 <body>
 <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -41,7 +41,7 @@
     <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
     <button id="themeBtn" type="button" class="theme-btn">ライト</button>
     <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-    <span class="ver">v4d</span>
+    <span class="ver">v4e</span>
   </header>
 
   <section id="boardWrap" class="board-wrap">
@@ -54,14 +54,27 @@
   <div id="popups" class="popups"></div>
   <section id="chatDock" class="chat-dock">
     <div id="chatSplit" class="chat-split" title="ドラッグで高さを変える"></div>
-    <div class="chat-dock-bar">
-      <span class="msg">見出しドラッグで並べ替え（メインは固定）・境目ドラッグで高さ変更</span>
-      <span class="row">
-        <button id="chanAdd" type="button" class="mini" hidden>＋ タブを追加</button>
-        <label class="check"><input id="popToggle" type="checkbox">新着ポップアップを出す</label>
-      </span>
+    <div id="chatWin" class="chat-win">
+      <div class="chat-win-top">
+        <nav id="chatTabs" class="chat-tabs"></nav>
+        <button id="chanAdd" type="button" class="mini" title="タブを追加（KP）" hidden>＋</button>
+        <label class="check pc-only pop-opt" title="PCで盤面左下に新着発言を出す"><input id="popToggle" type="checkbox">新着ポップアップ</label>
+      </div>
+      <ol id="log" class="log"></ol>
+      <div class="chat-tools">
+        <label class="tool">名前<select id="chatWho"></select></label>
+        <label class="tool">表情<select id="chatFace"></select></label>
+        <label class="tool" title="発言の文字の色">文字色<input id="chatColor" type="color" value="#dddddd"></label>
+        <button id="chatColorReset" type="button" class="mini" title="文字色を元に戻す">元の色</button>
+        <span id="diceBtns" class="dice-btns"></span>
+      </div>
+      <div id="myStatus" class="my-status mobile-only" hidden></div>
+      <div id="chatBonus" class="bonus mobile-only"></div>
+      <div class="send">
+        <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
+        <button id="sendBtn" type="button" class="primary">送信</button>
+      </div>
     </div>
-    <div id="chatCols" class="chat-cols"></div>
   </section>
 
   <aside id="kpSide" class="side kp-side" hidden>
@@ -110,12 +123,6 @@
         <div class="field">背景<div id="bgPick" class="img-pick"></div></div>
         <div class="field">前景（レイヤー1）<div id="fgPick" class="img-pick"></div></div>
       </details>
-      <details class="acc-color-3">
-        <summary>ココフォリアの room.zip を読み込む</summary>
-        <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
-        <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・テキストを置き換える</label>
-        <p id="zipMsg" class="msg"></p>
-      </details>
       <details class="acc-color-2">
         <summary>CT使用（クリチケ）</summary>
         <label class="field">「CT使用」で次の判定1回に足す値<input id="ctBonus" type="number" min="1" max="99" inputmode="numeric"></label>
@@ -127,8 +134,13 @@
       </details>
       <details class="acc-color-4">
         <summary>部屋の管理</summary>
+        <div class="field">ココフォリアの room.zip を読み込む
+          <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
+          <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・テキストを置き換える</label>
+          <p id="zipMsg" class="msg"></p>
+        </div>
         <div class="row wrap">
-          <button id="assetsDelAll" type="button" class="del">部屋の画像を全部削除</button>
+          <button id="assetsDelAll" type="button" class="del">部屋の画像を全て削除</button>
           <button id="roomDelete" type="button" class="del owner-only">部屋そのものを削除</button>
         </div>
         <p class="msg owner-note">部屋そのものの削除は、部屋を作ったKPだけができます</p>
@@ -150,16 +162,7 @@
       <button type="button" data-tab="chars">キャラ</button>
     </nav>
 
-    <div id="tab-chat" class="panel">
-      <nav id="chatTabs" class="chat-tabs"></nav>
-      <ol id="log" class="log"></ol>
-      <div id="charBar" class="char-bar"></div>
-      <div id="myStatus" class="my-status" hidden></div>
-      <div id="chatBonus" class="bonus"></div>
-      <div class="send">
-        <textarea id="chatInput" rows="2" placeholder="発言 / ダイス（例: CCB&lt;=50）　Enterで送信・Shift+Enterで改行"></textarea>
-        <button id="sendBtn" type="button" class="primary">送信</button>
-      </div>
+    <div id="tab-chat" class="panel"></div>
     </div>
 
     <div id="tab-palette" class="panel" hidden>
@@ -170,7 +173,7 @@
       </details>
       <label class="pal-place">発言場所
         <select id="palPlace">
-          <option value="">未指定（最後に書き込んだ列）</option>
+          <option value="">未指定（チャットウィンドウで開いているタブ）</option>
           <option value="main">メイン</option>
           <option value="info">情報</option>
           <option value="talk">雑談</option>

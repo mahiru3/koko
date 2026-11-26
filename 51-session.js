@@ -1,12 +1,12 @@
-import { firebaseConfig } from "./51-session-config.js?v=4d";
+import { firebaseConfig } from "./51-session-config.js?v=4e";
 import {
   initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator,
   getDatabase, ref, push, set, update, remove, onValue, onChildAdded,
   onChildRemoved, query, limitToLast, serverTimestamp, onDisconnect, connectDatabaseEmulator
-} from "./51-session-fb.js?v=4d";
-import { parseTekeyJson, renderPalette, expandVars, moveLine } from "./51-session-palette.js?v=4d";
-import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4d";
-import { ensureProfile } from "./51-session-id.js?v=4d";
+} from "./51-session-fb.js?v=4e";
+import { parseTekeyJson, renderPalette, expandVars, moveLine } from "./51-session-palette.js?v=4e";
+import { readRoomZip, compressImage, assetKey, parseCharJson, normLabel } from "./51-session-import.js?v=4e";
+import { ensureProfile } from "./51-session-id.js?v=4e";
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -329,6 +329,7 @@ function saveWins() {
 
 function fixPlTab() {
   if (isPc() && !$("tab-chat").hidden) showTab("palette");
+  if (S.chanReady) placeChatWin();
 }
 
 function applyWins() {
@@ -601,6 +602,7 @@ function initChat() {
 function initChatDock() {
   try { S.colOrder = JSON.parse(localStorage.getItem("s51-cols") || "[]"); } catch (e) { S.colOrder = []; }
   $("chanAdd").addEventListener("click", addChan);
+  initChatTools();
   S.popPc = localStorage.getItem("s51-popup") === "1";
   $("popToggle").checked = S.popPc;
   $("popToggle").addEventListener("change", () => { S.popPc = $("popToggle").checked; localStorage.setItem("s51-popup", S.popPc ? "1" : "0"); });
@@ -623,7 +625,7 @@ function initChatDock() {
   };
   sp.addEventListener("pointerup", end);
   sp.addEventListener("pointercancel", end);
-  buildChatCols();
+  placeChatWin();
 }
 
 function setChatH(h) {
@@ -656,7 +658,7 @@ function chansChanged() {
   if (sig === S.chanSig) return;
   S.chanSig = sig;
   if (!isChan(S.chatTab)) S.chatTab = "main";
-  buildChatCols();
+  $("chanAdd").hidden = !S.isKP;
   buildChatTabs();
   buildPlaceOptions();
 }
@@ -664,11 +666,45 @@ function chansChanged() {
 function buildChatTabs() {
   const nav = $("chatTabs");
   nav.replaceChildren();
+  let drag = "";
   colKeys().forEach((k) => {
     const b = el("button", "", tabName(k));
     b.type = "button";
     b.dataset.ch = k;
     b.addEventListener("click", () => switchChatTab(k));
+    if (k === "main") {
+      b.title = "メイン（左端に固定）";
+    } else {
+      b.draggable = true;
+      b.title = "ドラッグで並べ替え";
+      b.addEventListener("dragstart", (e) => { drag = k; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", k); });
+      b.addEventListener("dragend", () => { drag = ""; });
+    }
+    b.addEventListener("dragover", (e) => { if (drag && drag !== k && k !== "main") { e.preventDefault(); b.classList.add("drop"); } });
+    b.addEventListener("dragleave", () => b.classList.remove("drop"));
+    b.addEventListener("drop", (e) => {
+      e.preventDefault();
+      b.classList.remove("drop");
+      if (!drag || drag === k || k === "main") return;
+      S.colOrder = colKeys();
+      const a = S.colOrder.indexOf(drag);
+      const t = S.colOrder.indexOf(k);
+      S.colOrder.splice(a, 1);
+      S.colOrder.splice(t, 0, drag);
+      drag = "";
+      localStorage.setItem("s51-cols", JSON.stringify(S.colOrder));
+      buildChatTabs();
+      buildPlaceOptions();
+    });
+    if (S.isKP && !CH_TABS.some(([x]) => x === k)) {
+      const rn = el("span", "tab-act", "✎");
+      rn.title = "名前を変える";
+      rn.addEventListener("click", (e) => { e.stopPropagation(); renameChan(k); });
+      const dl = el("span", "tab-act", "×");
+      dl.title = "このタブを削除";
+      dl.addEventListener("click", (e) => { e.stopPropagation(); deleteChan(k); });
+      b.append(rn, dl);
+    }
     nav.append(b);
   });
   renderChatTabs();
@@ -679,7 +715,7 @@ function buildPlaceOptions() {
   const sel = $("palPlace");
   const v = sel.value;
   sel.replaceChildren();
-  const none = el("option", "", "未指定（最後に書き込んだ列）");
+  const none = el("option", "", "未指定（チャットウィンドウで開いているタブ）");
   none.value = "";
   sel.append(none);
   colKeys().forEach((k) => { const o = el("option", "", tabName(k)); o.value = k; sel.append(o); });
@@ -711,88 +747,78 @@ async function deleteChan(k) {
   await postSystem("チャットのタブ「" + name + "」を削除しました");
 }
 
-function buildChatCols() {
-  const box = $("chatCols");
-  const drafts = {};
-  box.querySelectorAll(".chat-col").forEach((c) => { const t = c.querySelector("textarea"); if (t && t.value) drafts[c.dataset.ch] = t.value; });
-  box.replaceChildren();
-  $("chanAdd").hidden = !S.isKP;
-  let drag = "";
-  colKeys().forEach((k) => {
-    const col = el("div", "chat-col");
-    col.dataset.ch = k;
-    const head = el("div", "chat-col-head");
-    head.append(el("span", "chat-col-name", tabName(k)));
-    if (S.isKP && !CH_TABS.some(([x]) => x === k)) {
-      const rn = el("button", "mini", "名前");
-      rn.type = "button";
-      rn.addEventListener("click", () => renameChan(k));
-      const dl = el("button", "mini del", "削除");
-      dl.type = "button";
-      dl.addEventListener("click", () => deleteChan(k));
-      head.append(rn, dl);
-    }
-    if (k === "main") {
-      head.title = "メインは左端に固定";
-      head.classList.add("fixed");
-    } else {
-      head.draggable = true;
-      head.title = "ドラッグで並べ替え";
-    }
-    col.addEventListener("dragover", (e) => { if (drag && drag !== k && k !== "main") { e.preventDefault(); col.classList.add("drop"); } });
-    head.addEventListener("dragstart", (e) => { drag = k; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", k); col.classList.add("dragging"); });
-    head.addEventListener("dragend", () => { drag = ""; col.classList.remove("dragging"); });
-    col.addEventListener("dragleave", () => col.classList.remove("drop"));
-    col.addEventListener("drop", (e) => {
-      e.preventDefault();
-      col.classList.remove("drop");
-      if (!drag || drag === k || k === "main") return;
-      S.colOrder = colKeys();
-      const a = S.colOrder.indexOf(drag);
-      const t = S.colOrder.indexOf(k);
-      S.colOrder.splice(a, 1);
-      S.colOrder.splice(t, 0, drag);
-      drag = "";
-      localStorage.setItem("s51-cols", JSON.stringify(S.colOrder));
-      buildChatCols();
-    });
-    const log = el("ol", "log col-log");
-    S.msgs.filter((m) => tabOf(m) === k).forEach((m) => log.append(messageNode(m)));
-    const who = el("div", "col-who");
-    const send = el("div", "send");
-    const ta = el("textarea");
-    ta.rows = 2;
-    ta.value = drafts[k] || "";
-    ta.placeholder = tabName(k) + "に発言　Enterで送信・Shift+Enterで改行";
-    const go = el("button", "primary", "送信");
-    go.type = "button";
-    const fire = async () => {
-      const text = ta.value.replace(/\s+$/, "");
-      if (!text) return;
-      ta.value = "";
-      S.chatTab = k;
-      markLastCol();
-      try { await sendChat(text, S.speaker, k); } catch (err) { ta.value = text; setStatus("送信失敗: " + err.message, true); }
-    };
-    go.addEventListener("click", fire);
-    ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); fire(); } });
-    send.append(ta, go);
-    col.append(head, log, who, send);
-    box.append(col);
-    log.scrollTop = log.scrollHeight;
-  });
-  renderColWho();
-  markLastCol();
+function placeChatWin() {
+  const w = $("chatWin");
+  const host = isPc() ? $("chatDock") : $("tab-chat");
+  if (w.parentElement !== host) { host.append(w); scrollLog(true); }
 }
 
-function markLastCol() {
-  document.querySelectorAll(".chat-col").forEach((c) => c.classList.toggle("last", c.dataset.ch === S.chatTab));
-}
-
-function renderColWho() {
+function renderChatWho() {
+  const who = $("chatWho");
+  if (!who) return;
+  if (document.activeElement !== who) {
+    who.replaceChildren();
+    const me = el("option", "", S.name || "（PL）");
+    me.value = "";
+    who.append(me);
+    speakerEntries().forEach(([id, c]) => { const o = el("option", "", c.name || "（名前なし）"); o.value = id; who.append(o); });
+    who.value = S.speaker || "";
+  }
+  const face = $("chatFace");
+  if (document.activeElement === face) return;
+  face.replaceChildren();
   const c = speakerChar();
-  document.querySelectorAll(".col-who").forEach((w) => {
-    w.textContent = "発言キャラ：" + (c ? c.name || "（名前なし）" : S.name) + "（チャパレタブで切替）";
+  const list = c ? faceList(c).filter((f) => f.label) : [];
+  const none = el("option", "", list.length ? "（そのまま）" : "なし");
+  none.value = "";
+  face.append(none);
+  list.forEach((f) => { const o = el("option", "", f.label); o.value = f.label; face.append(o); });
+  face.value = c && c.face && list.some((f) => f.label === c.face) ? c.face : "";
+  face.disabled = !list.length || !canEdit(c);
+}
+
+function textColor() {
+  const v = localStorage.getItem("s51-tcolor") || "";
+  return /^#[0-9a-f]{6}$/i.test(v) ? v : "";
+}
+
+function initChatTools() {
+  $("chatWho").addEventListener("change", () => setSpeaker($("chatWho").value));
+  $("chatFace").addEventListener("change", () => {
+    const c = speakerChar();
+    const v = $("chatFace").value;
+    if (c && v && canEdit(c)) update(rp("chars/" + S.speaker), { face: v }).catch((e) => setStatus("保存失敗: " + e.message, true));
+  });
+  const tc = textColor();
+  if (tc) $("chatColor").value = tc;
+  $("chatColorReset").hidden = !tc;
+  $("chatColor").addEventListener("input", () => {
+    localStorage.setItem("s51-tcolor", $("chatColor").value);
+    $("chatColorReset").hidden = false;
+    $("chatInput").style.color = $("chatColor").value;
+  });
+  $("chatColorReset").addEventListener("click", () => {
+    localStorage.removeItem("s51-tcolor");
+    $("chatColor").value = "#dddddd";
+    $("chatColorReset").hidden = true;
+    $("chatInput").style.color = "";
+  });
+  if (tc) $("chatInput").style.color = tc;
+  const box = $("diceBtns");
+  [4, 6, 8, 10, 12, 20, 100].forEach((n) => {
+    const b = el("button", "mini die", "D" + n);
+    b.type = "button";
+    b.title = "入力欄に 1D" + n + " を入れる（もう一度押すと個数が増える）";
+    b.addEventListener("click", () => {
+      const ta = $("chatInput");
+      const v = ta.value.trim();
+      const m = v.match(new RegExp("^(\\d+)D" + n + "$", "i"));
+      if (!v) ta.value = "1D" + n;
+      else if (m) ta.value = (+m[1] + 1) + "D" + n;
+      else ta.value = v + "+1D" + n;
+      ta.focus();
+    });
+    box.append(b);
   });
 }
 
@@ -807,7 +833,6 @@ function tabName(k) {
 
 function switchChatTab(k) {
   S.chatTab = k;
-  markLastCol();
   S.unread[k] = false;
   renderChatTabs();
   const log = $("log");
@@ -961,7 +986,7 @@ function renderSpeaker() {
   });
   renderMyStatus();
   renderBonus();
-  renderColWho();
+  renderChatWho();
 }
 
 async function submit(raw) {
@@ -1104,6 +1129,7 @@ async function sendChat(rawText, charId0, place) {
     t: serverTimestamp()
   };
   if (icon) msg.icon = icon;
+  if (textColor()) msg.tc = textColor();
   if (first.startsWith(":")) {
     const r = await statusCommand(first, charId);
     if (r) {
@@ -1162,7 +1188,9 @@ function messageNode(m) {
   if (m.secret && m.uid !== S.uid) {
     body.append(el("div", "dice secret", "シークレットダイス"));
   } else {
-    body.append(el("div", "text", m.text || ""));
+    const tx = el("div", "text", m.text || "");
+    if (/^#[0-9a-f]{6}$/i.test(m.tc || "")) tx.style.color = m.tc;
+    body.append(tx);
     if (m.dice) body.append(el("div", "dice " + (m.res || ""), (m.secret ? "[S] " : "") + m.dice));
   }
   li.append(body);
@@ -1174,13 +1202,6 @@ function renderMessage(m) {
   S.msgs.push(m);
   if (S.msgs.length > LOG_LIMIT) S.msgs.shift();
   const k = tabOf(m);
-  const col = document.querySelector(".chat-col[data-ch='" + k + "'] .col-log");
-  if (col) {
-    const stick = col.scrollHeight - col.scrollTop - col.clientHeight < 80;
-    col.append(messageNode(m));
-    while (col.children.length > LOG_LIMIT) col.firstElementChild.remove();
-    if (stick || m.uid === S.uid) col.scrollTop = col.scrollHeight;
-  }
   if (k === S.chatTab) {
     const stick = nearBottom();
     const log = $("log");
@@ -1217,9 +1238,8 @@ function popMessage(m) {
   p.append(body, x);
   p.addEventListener("click", () => {
     p.remove();
-    if (!isPc()) { showTab("chat"); switchChatTab(tabOf(m)); return; }
-    const col = document.querySelector(".chat-col[data-ch='" + tabOf(m) + "']");
-    if (col) { col.classList.remove("flash"); void col.offsetWidth; col.classList.add("flash"); }
+    if (!isPc()) showTab("chat");
+    switchChatTab(tabOf(m));
   });
   box.append(p);
   const max = isPc() ? 3 : 1;
