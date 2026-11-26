@@ -1,11 +1,12 @@
-import { push, set, update, onValue, onChildAdded, query, limitToLast, serverTimestamp } from "./51-session-fb.js?v=4g";
-import { expandVars } from "./51-session-palette.js?v=4g";
-import { assetKey, normLabel } from "./51-session-import.js?v=4g";
-import { $, LOG_LIMIT, CH_TABS, CHECK_RE, S, visibleChar, isStand, canEdit, el, setStatus, faceList, charIcon, src, rp, sorted, isPc, speakerChar } from "./51-session-core.js?v=4g";
-import { showTab } from "./51-session-layout.js?v=4g";
-import { queueRender } from "./51-session-board.js?v=4g";
-import { buildPlaceOptions, renderPalFace, renderPaletteTabs, setPalPlace } from "./51-session-pal.js?v=4g";
-import { renderChanList, addChan, renameChan, deleteChan, applyScene } from "./51-session-kp.js?v=4g";
+import { onChildChanged, onChildRemoved, ref, remove, push, set, update, onValue, onChildAdded, query, limitToLast, serverTimestamp } from "./51-session-fb.js?v=4i";
+import { expandVars } from "./51-session-palette.js?v=4i";
+import { assetKey, normLabel } from "./51-session-import.js?v=4i";
+import { $, LOG_LIMIT, CH_TABS, CHECK_RE, S, visibleChar, isStand, canEdit, el, setStatus, faceList, charIcon, src, rp, sorted, isPc, speakerChar } from "./51-session-core.js?v=4i";
+import { showTab } from "./51-session-layout.js?v=4i";
+import { queueRender } from "./51-session-board.js?v=4i";
+import { buildPlaceOptions, renderPalFace, renderPaletteTabs, setPalPlace, renderPalDest } from "./51-session-pal.js?v=4i";
+import { renderChanList, addChan, renameChan, deleteChan, applyScene } from "./51-session-kp.js?v=4i";
+import { addSecretChan, initSecrets, isOpen, isSecret, openSdice, sdiceOf, secretList, sendSecretDice, watchSdice } from "./51-session-secret.js?v=4i";
 
 export function lookupVars(c) {
   const v = {};
@@ -27,11 +28,14 @@ export function initChat() {
   try { S.cbOrder = JSON.parse(localStorage.getItem("s51-cborder-" + S.roomId) || "[]"); } catch { S.cbOrder = []; }
   try { S.palPlace = JSON.parse(localStorage.getItem("s51-palplace-" + S.roomId) || "{}"); } catch { S.palPlace = {}; }
   const q = query(rp("messages"), limitToLast(LOG_LIMIT));
-  onChildAdded(q, (snap) => renderMessage(snap.val()));
+  onChildAdded(q, (snap) => { const m = snap.val(); if (m) { m.key = snap.key; renderMessage(m); } });
+  onChildChanged(q, (snap) => { const m = snap.val(); if (m) { m.key = snap.key; msgChanged(m); } });
+  onChildRemoved(q, (snap) => msgRemoved(snap.key));
   onValue(q, () => { S.popReady = true; }, { onlyOnce: true });
   renderBonus();
   initChatDock();
   S.chanReady = true;
+  initSecrets();
   chansChanged();
 }
 
@@ -39,6 +43,7 @@ export function initChatDock() {
   try { S.colOrder = JSON.parse(localStorage.getItem("s51-cols") || "[]"); } catch { S.colOrder = []; }
   $("chanAdd").addEventListener("click", addChan);
   $("chanAdd2").addEventListener("click", addChan);
+  $("chanAddSecret").addEventListener("click", addSecretChan);
   $("palFace").addEventListener("click", () => { $("palFaceList").hidden = !$("palFaceList").hidden; renderPalFace(); });
   initChatTools();
   S.popPc = localStorage.getItem("s51-popup") === "1";
@@ -76,7 +81,116 @@ export function chans() {
     .filter(([, c]) => c && c.name)
     .sort((a, b) => (a[1].t || 0) - (b[1].t || 0) || a[0].localeCompare(b[0]))
     .map(([k, c]) => [k, String(c.name)]);
-  return CH_TABS.concat(custom);
+  return CH_TABS.concat(custom, S.sChans ? secretList() : []);
+}
+
+export function tabLabel(k) {
+  return (isSecret(k) && !isOpen(k) ? "🔒" : "") + tabName(k);
+}
+
+export function msgChanged(m) {
+  const i = S.msgs.findIndex((x) => x.key === m.key && tabOf(x) === tabOf(m));
+  if (i >= 0) S.msgs[i] = m;
+  rerenderLog();
+}
+
+export function msgRemoved(key) {
+  const n = S.msgs.length;
+  S.msgs = S.msgs.filter((x) => x.key !== key);
+  if (S.editing === key) S.editing = "";
+  if (S.msgs.length !== n) rerenderLog();
+}
+
+export function msgPath(m) {
+  return isSecret(m.tab) ? "secrets/" + S.roomId + "/msgs/" + m.tab + "/" + m.key : "rooms/" + S.roomId + "/messages/" + m.key;
+}
+
+function storedOf(m) {
+  const o = { ...m };
+  delete o.key;
+  return o;
+}
+
+export function canEditMsg(m) {
+  return !!m.key && m.uid === S.uid && !m.sys && !m.secret;
+}
+
+export function canDeleteMsg(m) {
+  return !!m.key && (m.uid === S.uid || S.isKP);
+}
+
+export async function saveEdit(m, text) {
+  const t = String(text).replace(/\s+$/, "").slice(0, 2000);
+  if (!t) return;
+  try {
+    await set(ref(S.db, msgPath(m)), { ...storedOf(m), text: t, edited: true, et: serverTimestamp() });
+    S.editing = "";
+    rerenderLog();
+  } catch (e) {
+    setStatus("修正できませんでした: " + e.message, true);
+  }
+}
+
+export async function deleteMsg(m) {
+  const own = m.uid === S.uid;
+  if (!confirm(own ? "この発言を削除しますか？" : "「" + (m.name || "") + "」の発言を削除しますか？（KPとして削除）")) return;
+  try {
+    await remove(ref(S.db, msgPath(m)));
+  } catch (e) {
+    setStatus("削除できませんでした: " + e.message, true);
+  }
+}
+
+function msgActions(m, li) {
+  const box = el("div", "msg-actions");
+  if (canEditMsg(m)) {
+    const ed = el("button", "mini", "編集");
+    ed.type = "button";
+    ed.addEventListener("click", (e) => { e.stopPropagation(); S.editing = m.key; S.editDraft = m.text || ""; rerenderLog(); });
+    box.append(ed);
+  }
+  if (canDeleteMsg(m)) {
+    const dl = el("button", "mini del", "削除");
+    dl.type = "button";
+    dl.addEventListener("click", (e) => { e.stopPropagation(); deleteMsg(m); });
+    box.append(dl);
+  }
+  if (!box.childElementCount) return;
+  li.append(box);
+  li.classList.add("has-actions");
+  li.addEventListener("click", (e) => { if (!e.target.closest("button, textarea, a")) li.classList.toggle("show-actions"); });
+}
+
+function editorNode(m) {
+  const box = el("div", "msg-edit");
+  const ta = el("textarea");
+  ta.rows = 2;
+  ta.value = S.editDraft ?? m.text ?? "";
+  ta.addEventListener("input", () => { S.editDraft = ta.value; });
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); saveEdit(m, ta.value); }
+    if (e.key === "Escape") { S.editing = ""; rerenderLog(); }
+  });
+  const ok = el("button", "mini primary", "保存");
+  ok.type = "button";
+  ok.addEventListener("click", () => saveEdit(m, ta.value));
+  const ng = el("button", "mini", "やめる");
+  ng.type = "button";
+  ng.addEventListener("click", () => { S.editing = ""; rerenderLog(); });
+  const row = el("div", "row");
+  row.append(ok, ng);
+  box.append(ta, row);
+  setTimeout(() => { if (S.editing === m.key && document.activeElement !== ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); } }, 0);
+  return box;
+}
+
+export function rerenderLog() {
+  const log = $("log");
+  if (!log) return;
+  const stick = nearBottom();
+  log.replaceChildren();
+  S.msgs.filter((m) => tabOf(m) === S.chatTab).forEach((m) => log.append(messageNode(m)));
+  if (stick) scrollLog(true);
 }
 
 export function isChan(k) {
@@ -92,7 +206,7 @@ export function colKeys() {
 }
 
 export function chansChanged() {
-  const sig = JSON.stringify([chans(), S.isKP, (S.meta && S.meta.tabColors) || {}]);
+  const sig = JSON.stringify([chans(), S.isKP, (S.meta && S.meta.tabColors) || {}, S.sChans || {}, S.players ? Object.keys(S.players) : []]);
   if (sig === S.chanSig) return;
   S.chanSig = sig;
   if (!isChan(S.chatTab)) S.chatTab = "main";
@@ -107,7 +221,7 @@ export function buildChatTabs() {
   nav.replaceChildren();
   let drag = "";
   colKeys().forEach((k) => {
-    const b = el("button", "", tabName(k));
+    const b = el("button", "", tabLabel(k));
     b.type = "button";
     b.dataset.ch = k;
     b.addEventListener("click", () => { switchChatTab(k); setPalPlace(k); });
@@ -152,7 +266,7 @@ export function buildChatTabs() {
 }
 
 export function tabColor(k) {
-  const v = S.meta && S.meta.tabColors && S.meta.tabColors[k];
+  const v = isSecret(k) ? S.sChans[k].color : S.meta && S.meta.tabColors && S.meta.tabColors[k];
   return /^#[0-9a-f]{6}$/i.test(v || "") ? v : "";
 }
 
@@ -248,6 +362,7 @@ export function tabName(k) {
 
 export function switchChatTab(k) {
   S.chatTab = k;
+  renderPalDest();
   S.unread[k] = false;
   renderChatTabs();
   const log = $("log");
@@ -530,18 +645,23 @@ export async function sendChat(rawText, charId0, place) {
     const m = text.split("\n")[0].match(/^\/var\s+(\S+)\s?(.*)$/);
     if (m && !S.isKP) { setStatus("ルーム変数（/var）はKPとKP権限の人だけが変更できます", true); return; }
     if (m) {
-      await set(rp("meta/vars/" + assetKey(m[1])), m[2] === "" ? "　" : m[2]);
-      await postSystem("ルーム変数 " + m[1] + " を「" + m[2] + "」にしました");
+      const key = assetKey(m[1]);
+      const old = S.vars && S.vars[key] !== undefined ? String(S.vars[key]) : "";
+      const val = m[2] === "" ? "　" : m[2];
+      await set(rp("meta/vars/" + key), val);
+      await postSystem("[ room ] " + m[1] + " : " + (old === "" ? "　" : old) + " → " + val);
     }
     return;
   }
 
+  const tab = isChan(place) ? place : isChan(S.chatTab) ? S.chatTab : "main";
+  const dest = isSecret(tab) ? "secrets/" + S.roomId + "/msgs/" + tab : "rooms/" + S.roomId + "/messages";
   const msg = {
     uid: S.uid,
     name: (c ? c.name : S.name) || S.name,
     color: c ? c.color || S.color : S.color,
     text: expanded.slice(0, 2000),
-    tab: isChan(place) ? place : isChan(S.chatTab) ? S.chatTab : "main",
+    tab,
     t: serverTimestamp()
   };
   if (icon) msg.icon = icon;
@@ -551,7 +671,8 @@ export async function sendChat(rawText, charId0, place) {
     if (r) {
       msg.dice = r.error || r.text;
       msg.res = r.error ? "failure" : "";
-      await push(rp("messages"), msg);
+      if (!r.error) msg.st = true;
+      await push(ref(S.db, dest), msg);
       return;
     }
   }
@@ -574,7 +695,11 @@ export async function sendChat(rawText, charId0, place) {
       msg.dice = (msg.dice + "\n［CT使用 ＋" + used.n + "：" + st[i].label + " " + before + " → " + (before - 1) + "］").slice(0, 2000);
     }
   }
-  await push(rp("messages"), msg);
+  if (msg.secret) {
+    await sendSecretDice(dest, msg);
+    return;
+  }
+  await push(ref(S.db, dest), msg);
 }
 
 export function nearBottom() {
@@ -600,8 +725,29 @@ export function messageNode(m) {
   const head = el("div", "who", m.name || "?");
   head.style.color = m.color || "#ccc";
   head.append(el("span", "time", m.t ? new Date(m.t).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : ""));
+  if (m.edited) head.append(el("span", "edited", "（編集済み）"));
   body.append(head);
-  if (m.secret && m.uid !== S.uid) {
+  if (S.editing && S.editing === m.key && canEditMsg(m)) {
+    body.append(editorNode(m));
+    if (m.dice) body.append(el("div", "dice " + (m.res || ""), m.dice));
+    li.append(body);
+    return li;
+  }
+  if (m.secret && m.key) {
+    const d = sdiceOf(m);
+    if (!d) {
+      body.append(el("div", "dice secret", "シークレットダイス"));
+    } else {
+      const tx = el("div", "text", d.text || "");
+      body.append(tx, el("div", "dice " + (d.res || ""), (d.opened ? "[S公開] " : "[S] ") + (d.dice || "")));
+      if (!d.opened) {
+        const op = el("button", "mini sd-open", "このダイスを公開");
+        op.type = "button";
+        op.addEventListener("click", () => openSdice(m));
+        body.append(op);
+      }
+    }
+  } else if (m.secret && m.uid !== S.uid) {
     body.append(el("div", "dice secret", "シークレットダイス"));
   } else {
     const tx = el("div", "text", m.text || "");
@@ -610,11 +756,13 @@ export function messageNode(m) {
     if (m.dice) body.append(el("div", "dice " + (m.res || ""), (m.secret ? "[S] " : "") + m.dice));
   }
   li.append(body);
+  msgActions(m, li);
   return li;
 }
 
 export function renderMessage(m) {
   if (!m) return;
+  watchSdice(m);
   S.msgs.push(m);
   if (S.msgs.length > LOG_LIMIT) S.msgs.shift();
   const k = tabOf(m);

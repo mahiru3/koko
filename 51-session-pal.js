@@ -1,7 +1,7 @@
-import { update } from "./51-session-fb.js?v=4g";
-import { parseTekeyJson, renderPalette, moveLine } from "./51-session-palette.js?v=4g";
-import { $, S, canEdit, el, setStatus, newKey, faceList, charIcon, src, rp, isPc, speakerChar, charByName } from "./51-session-core.js?v=4g";
-import { isChan, colKeys, buildChatTabs, paintTab, tabName, sendChat } from "./51-session-chat.js?v=4g";
+import { update } from "./51-session-fb.js?v=4i";
+import { parseTekeyJson, renderPalette, moveLine } from "./51-session-palette.js?v=4i";
+import { $, S, canEdit, el, setStatus, newKey, faceList, charIcon, src, rp, isPc, speakerChar, charByName } from "./51-session-core.js?v=4i";
+import { isChan, colKeys, buildChatTabs, paintTab, tabName, sendChat, tabLabel, tabColor } from "./51-session-chat.js?v=4i";
 
 export function buildPlaceOptions() {
   const box = $("palPlaceBtns");
@@ -11,7 +11,7 @@ export function buildPlaceOptions() {
   const now = cur ? cur.place || "" : "";
   let drag = "";
   [""].concat(colKeys()).forEach((k) => {
-    const b = el("button", "place-btn" + ((isChan(now) ? now : "") === k ? " on" : ""), k ? tabName(k) : "未指定");
+    const b = el("button", "place-btn" + ((isChan(now) ? now : "") === k ? " on" : ""), k ? tabLabel(k) : "未指定");
     b.type = "button";
     b.dataset.ch = k;
     b.title = k ? tabName(k) + "に送る" : "チャットウィンドウで開いているタブに送る";
@@ -34,6 +34,7 @@ export function buildPlaceOptions() {
     });
     box.append(b);
   });
+  renderPalDest();
 }
 
 export function moveChanOrder(from, to) {
@@ -46,6 +47,20 @@ export function moveChanOrder(from, to) {
   localStorage.setItem("s51-cols", JSON.stringify(S.colOrder));
   buildChatTabs();
   buildPlaceOptions();
+}
+
+export function renderPalDest() {
+  const box = $("palDest");
+  if (!box) return;
+  const cur = curPalette();
+  const set0 = cur && isChan(cur.place) ? cur.place : "";
+  const k = set0 || S.chatTab || "main";
+  box.replaceChildren();
+  box.append(el("span", "pal-dest-label", "送信先"));
+  const chip = el("span", "pal-dest-tab", tabLabel(k));
+  chip.style.setProperty("--tab-c", tabColor(k) || "var(--accent)");
+  box.append(chip);
+  if (!set0) box.append(el("span", "pal-dest-note", "（未指定：チャットウィンドウで開いているタブ）"));
 }
 
 export function setPalPlace(k) {

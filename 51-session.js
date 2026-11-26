@@ -1,13 +1,15 @@
-import { firebaseConfig } from "./51-session-config.js?v=4g";
-import { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, getDatabase, ref, set, update, remove, onValue, onChildAdded, onChildRemoved, serverTimestamp, onDisconnect, connectDatabaseEmulator } from "./51-session-fb.js?v=4g";
-import { ensureProfile } from "./51-session-id.js?v=4g";
-import { $, params, ROOM_RE, S, applyTheme, kpCheck, el, setStatus, randomId, rp, syncMarkers } from "./51-session-core.js?v=4g";
-import { initTabs, initKeep, initWindows, applyKpLayout } from "./51-session-layout.js?v=4g";
-import { initChat, chansChanged, ctBonus, renderBonus, renderSpeaker } from "./51-session-chat.js?v=4g";
-import { initBoard, queueRender } from "./51-session-board.js?v=4g";
-import { initPalettes, renderPaletteTabs } from "./51-session-pal.js?v=4g";
-import { initChars, initPaste, renderCharList, renderCharDetail } from "./51-session-chars.js?v=4g";
-import { renderPlayers, renderScenes, renderNotes, renderBoardPickers, renderObjLists, renderVars, initRoomTab, queueAssetUi, updateAssetInfo } from "./51-session-kp.js?v=4g";
+import { firebaseConfig } from "./51-session-config.js?v=4i";
+import { initializeApp, getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator, getDatabase, ref, set, update, remove, onValue, onChildAdded, onChildRemoved, serverTimestamp, onDisconnect, connectDatabaseEmulator } from "./51-session-fb.js?v=4i";
+import { ensureProfile } from "./51-session-id.js?v=4i";
+import { $, params, ROOM_RE, S, applyTheme, kpCheck, el, setStatus, randomId, rp, syncMarkers } from "./51-session-core.js?v=4i";
+import { initTabs, initKeep, initWindows, applyKpLayout } from "./51-session-layout.js?v=4i";
+import { initChat, chansChanged, ctBonus, renderBonus, renderSpeaker, rerenderLog } from "./51-session-chat.js?v=4i";
+import { initBoard, queueRender } from "./51-session-board.js?v=4i";
+import { initPalettes, renderPaletteTabs } from "./51-session-pal.js?v=4i";
+import { initChars, initPaste, renderCharList, renderCharDetail } from "./51-session-chars.js?v=4i";
+import { renderPlayers, renderScenes, renderNotes, renderBoardPickers, renderObjLists, renderVars, initRoomTab, queueAssetUi, updateAssetInfo } from "./51-session-kp.js?v=4i";
+import { secretsForRole, syncOpened } from "./51-session-secret.js?v=4i";
+import { initLog } from "./51-session-log.js?v=4i";
 
 function initJoin() {
   $("joinRoom").value = params.get("room") || "";
@@ -75,6 +77,7 @@ async function startRoom() {
   await initSystems();
   initPresence().catch((e) => setStatus("参加者の登録に失敗しました: " + e.message, true));
   initChat();
+  initLog();
   initBoard();
   initChars();
   initPalettes();
@@ -98,7 +101,8 @@ async function startRoom() {
     if (!S.meta.owner && S.created && S.created === S.roomId) { S.created = ""; set(rp("meta/owner"), S.pid); }
     const kp = kpCheck();
     S.isOwner = !!S.pid && S.meta.owner === S.pid;
-    if (kp !== S.isKP) { S.isKP = kp; renderCharList(); renderSpeaker(); renderCharDetail(); }
+    if (kp !== S.isKP) { S.isKP = kp; renderCharList(); renderSpeaker(); renderCharDetail(); rerenderLog(); }
+    if (S.sSrc) { secretsForRole(); syncOpened(); }
     renderPlayers();
     applyKpLayout();
     syncMarkers();
@@ -163,7 +167,7 @@ async function initPresence() {
     location.href = location.pathname + "?room=" + encodeURIComponent(S.roomId) + "&kicked=1";
   });
   onValue(rp("members"), (snap) => { S.online = snap.val() || {}; renderPlayers(); });
-  onValue(rp("players"), (snap) => { S.players = snap.val() || {}; renderPlayers(); renderCharList(); renderCharDetail(); });
+  onValue(rp("players"), (snap) => { S.players = snap.val() || {}; renderPlayers(); renderCharList(); renderCharDetail(); if (S.chanReady) chansChanged(); });
 }
 
 document.body.classList.add("booted");

@@ -1,9 +1,10 @@
-import { push, set, update, remove } from "./51-session-fb.js?v=4g";
-import { readRoomZip } from "./51-session-import.js?v=4g";
-import { $, CH_TABS, S, isStand, showsParams, showsOther, el, setStatus, newKey, src, rp, sorted, onlinePids, playerName, curSceneId, objBase, objPath } from "./51-session-core.js?v=4g";
-import { showTab, applyKpLayout } from "./51-session-layout.js?v=4g";
-import { colKeys, tabColor, tabName, postSystem } from "./51-session-chat.js?v=4g";
-import { queueRender, uploadAsset, centerPos } from "./51-session-board.js?v=4g";
+import { ref, get, push, set, update, remove } from "./51-session-fb.js?v=4i";
+import { readRoomZip } from "./51-session-import.js?v=4i";
+import { $, CH_TABS, S, isStand, showsParams, showsOther, el, setStatus, newKey, src, rp, sorted, onlinePids, playerName, curSceneId, objBase, objPath } from "./51-session-core.js?v=4i";
+import { showTab, applyKpLayout } from "./51-session-layout.js?v=4i";
+import { colKeys, tabColor, tabName, postSystem, tabLabel, rerenderLog, tabOf } from "./51-session-chat.js?v=4i";
+import { queueRender, uploadAsset, centerPos } from "./51-session-board.js?v=4i";
+import { deleteSecret, isOpen, isSecret, memberBoxes, removeAllSecrets, renameSecret, setOpen, setSecretColor } from "./51-session-secret.js?v=4i";
 
 export function renderPlayers() {
   const list = $("memberList");
@@ -95,33 +96,86 @@ export async function removePlayer(pid) {
   await postSystem(name + " を部屋から外しました");
 }
 
+export function renderLogDelOptions() {
+  const sel = $("logDelTab");
+  if (!sel || document.activeElement === sel) return;
+  const v = sel.value;
+  sel.replaceChildren();
+  const all = el("option", "", "すべてのタブ（秘匿タブも）");
+  all.value = "*";
+  sel.append(all);
+  colKeys().forEach((k) => { const o = el("option", "", tabLabel(k) + "だけ"); o.value = k; sel.append(o); });
+  sel.value = [...sel.options].some((o) => o.value === v) ? v : "*";
+}
+
+export async function deleteLogs() {
+  if (!S.isOwner) return;
+  const k = $("logDelTab").value || "*";
+  const label = k === "*" ? "すべてのタブ（秘匿タブも）" : "タブ「" + tabName(k) + "」";
+  const typed = prompt(label + "のチャットログを削除します。元に戻せません。\n削除するなら「削除」と入力してください");
+  if (typed === null) return;
+  if (typed.trim() !== "削除") { $("adminMsg").textContent = "「削除」と入力されなかったので削除しませんでした"; return; }
+  try {
+    if (k === "*") {
+      await update(ref(S.db), {
+        ["rooms/" + S.roomId + "/messages"]: null,
+        ["rooms/" + S.roomId + "/sdopen"]: null,
+        ["secrets/" + S.roomId + "/msgs"]: null,
+        ["secrets/" + S.roomId + "/sdice"]: null
+      });
+    } else if (isSecret(k)) {
+      await set(ref(S.db, "secrets/" + S.roomId + "/msgs/" + k), null);
+    } else {
+      const all = (await get(rp("messages"))).val() || {};
+      const up = {};
+      Object.entries(all).forEach(([key, m]) => { if ((m && m.tab) === k || (k === "main" && m && !m.tab)) up[key] = null; });
+      if (Object.keys(up).length) await update(rp("messages"), up);
+    }
+    S.msgs = k === "*" ? [] : S.msgs.filter((m) => tabOf(m) !== k);
+    rerenderLog();
+    await postSystem("チャットのログを削除しました（" + label + "）");
+    $("adminMsg").textContent = "ログを削除しました";
+  } catch (e) {
+    $("adminMsg").textContent = "削除できませんでした: " + e.message;
+  }
+}
+
 export function renderChanList() {
+  renderLogDelOptions();
   const ul = $("chanList");
   if (!ul || !S.isKP) return;
   if (ul.contains(document.activeElement) && document.activeElement.matches("input")) return;
   ul.replaceChildren();
   colKeys().forEach((k) => {
-    const li = el("li", "chan-row");
-    const name = el("span", "chan-name", tabName(k));
+    const sec = isSecret(k);
+    const li = el("li", "chan-row" + (sec ? " secret" : ""));
+    const name = el("span", "chan-name", tabLabel(k));
     const col = el("input");
     col.type = "color";
     col.value = tabColor(k) || "#4a90d9";
     col.title = "タブの色";
-    col.addEventListener("change", () => set(rp("meta/tabColors/" + k), col.value));
+    col.addEventListener("change", () => (sec ? setSecretColor(k, col.value) : set(rp("meta/tabColors/" + k), col.value)));
     const clr = el("button", "mini", "色なし");
     clr.type = "button";
     clr.hidden = !tabColor(k);
-    clr.addEventListener("click", () => set(rp("meta/tabColors/" + k), null));
+    clr.addEventListener("click", () => (sec ? setSecretColor(k, null) : set(rp("meta/tabColors/" + k), null)));
     li.append(name, col, clr);
+    if (sec) {
+      const op = el("button", "mini" + (isOpen(k) ? " on" : ""), isOpen(k) ? "公開中（押すと秘匿に戻す）" : "公開する");
+      op.type = "button";
+      op.addEventListener("click", () => setOpen(k, !isOpen(k)));
+      li.append(op);
+    }
     if (!CH_TABS.some(([x]) => x === k)) {
       const rn = el("button", "mini", "名前");
       rn.type = "button";
-      rn.addEventListener("click", () => renameChan(k));
+      rn.addEventListener("click", () => (sec ? renameSecret(k) : renameChan(k)));
       const dl = el("button", "mini del", "削除");
       dl.type = "button";
-      dl.addEventListener("click", () => deleteChan(k));
+      dl.addEventListener("click", () => (sec ? deleteSecret(k) : deleteChan(k)));
       li.append(rn, dl);
     }
+    if (sec) li.append(memberBoxes(k));
     ul.append(li);
   });
 }
@@ -448,8 +502,33 @@ export function renderObjEditor(kind, force) {
     remove(rp(objPath(kind, id)));
     if (kind === "items") S.selItem = ""; else S.selMarker = "";
   });
-  row.append(center, dup, del);
+  const conv = el("button", "", kind === "items" ? "マーカーパネルにする" : "スクリーンパネルにする");
+  conv.type = "button";
+  conv.title = kind === "items" ? "今のシーンのマーカーパネルに移します" : "部屋のスクリーンパネルに移します";
+  conv.addEventListener("click", () => convertObj(kind, id));
+  row.append(center, dup, conv, del);
   box.append(row);
+}
+
+export async function convertObj(kind, id) {
+  const o = S[kind][id];
+  if (!o) return;
+  const toItem = kind === "markers";
+  const sid = curSceneId();
+  const where = toItem ? "部屋のスクリーンパネル" : sid ? "シーン「" + (S.scenes[sid].name || "") + "」のマーカーパネル" : "部屋のマーカーパネル（シーンなし）";
+  const lost = toItem ? "" : "\n（背の画像・出す／しまう・表／背／両方非表示の設定はなくなります）";
+  if (!confirm("「" + objLabel(kind, o) + "」を" + where + "にしますか？" + lost)) return;
+  const common = { x: o.x || 0, y: o.y || 0, w: o.w || 1, h: o.h || 1, z: o.z || 0, img: o.img || "", click: o.click || "", locked: !!o.locked };
+  const nk = toItem ? "items" : "markers";
+  const obj = toItem ? { ...common, type: "object", memo: o.text || "", active: true, closed: false, visible: true } : { ...common, text: o.memo || "" };
+  const key = push(rp(objBase(nk))).key;
+  try {
+    await update(rp(""), { [objPath(nk, key)]: obj, [objPath(kind, id)]: null });
+    if (kind === "items") S.selItem = ""; else S.selMarker = "";
+    selectObj(nk, key);
+  } catch (e) {
+    setStatus("変換に失敗しました: " + e.message, true);
+  }
 }
 
 export async function addObj(kind) {
@@ -496,6 +575,7 @@ export function initRoomTab() {
   $("noteAdd").addEventListener("click", addNote);
   $("itemAdd").addEventListener("click", () => addObj("items"));
   $("markerAdd").addEventListener("click", () => addObj("markers"));
+  $("logDelBtn").addEventListener("click", deleteLogs);
   $("roomDelete").addEventListener("click", deleteRoom);
 }
 
@@ -521,6 +601,7 @@ export async function deleteRoom() {
   if (typed === null) return;
   if (typed.trim() !== S.roomId) { $("adminMsg").textContent = "部屋IDが違うため削除しませんでした"; return; }
   try {
+    await removeAllSecrets();
     await remove(rp(""));
     localStorage.removeItem("s51-pal-" + S.roomId);
     localStorage.removeItem("s51-speaker-" + S.roomId);

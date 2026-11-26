@@ -1,7 +1,7 @@
-import { ref, onValue } from "./51-session-fb.js?v=4g";
-import { renderSpeaker } from "./51-session-chat.js?v=4g";
-import { queueRender } from "./51-session-board.js?v=4g";
-import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4g";
+import { ref, onValue } from "./51-session-fb.js?v=4i";
+import { renderSpeaker } from "./51-session-chat.js?v=4i";
+import { queueRender } from "./51-session-board.js?v=4i";
+import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4i";
 
 export const $ = (id) => document.getElementById(id);
 

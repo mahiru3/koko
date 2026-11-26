@@ -1701,6 +1701,110 @@ body.booted .boot-warn {
   color: #fff;
 }
 
+.pal-dest {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.pal-dest-label {
+  font-size: 12px;
+  color: var(--sub);
+}
+
+.pal-dest-tab {
+  --tab-c: var(--accent);
+  padding: 3px 12px;
+  border-radius: 6px;
+  background: var(--tab-c);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.pal-dest-note {
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.log-menu {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel2);
+}
+
+.log-menu button {
+  font-size: 12px;
+  padding: 3px 10px;
+}
+
+.sec-members {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding: 2px 0 4px 8px;
+  font-size: 12px;
+}
+
+.chan-row.secret {
+  border-left: 3px solid var(--acc4);
+  padding-left: 6px;
+}
+
+.mini.sd-open {
+  align-self: flex-start;
+  margin-top: 2px;
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.msg-item.has-actions {
+  position: relative;
+}
+
+.msg-actions {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  gap: 4px;
+}
+
+.msg-actions .mini {
+  font-size: 11px;
+  padding: 1px 8px;
+}
+
+.msg-item.has-actions:hover .msg-actions,
+.msg-item.show-actions .msg-actions {
+  display: flex;
+}
+
+.edited {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--sub);
+}
+
+.msg-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.msg-edit textarea {
+  width: 100%;
+  min-height: 3em;
+}
+
 @media (min-width: 801px) {
   .side.floating {
     position: fixed;

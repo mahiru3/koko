@@ -1,9 +1,9 @@
-import { ref, push, update, remove, serverTimestamp } from "./51-session-fb.js?v=4g";
-import { compressImage, parseCharJson } from "./51-session-import.js?v=4g";
-import { $, CHAR_Z, S, visibleChar, isStand, canEdit, showsParams, showsOther, canSeeParams, canSeeOther, el, setStatus, randomId, faceList, charIcon, src, rp, sorted, playerName } from "./51-session-core.js?v=4g";
-import { showTab } from "./51-session-layout.js?v=4g";
-import { setSpeaker } from "./51-session-chat.js?v=4g";
-import { uploadAsset, centerPos } from "./51-session-board.js?v=4g";
+import { ref, push, update, remove, serverTimestamp } from "./51-session-fb.js?v=4i";
+import { compressImage, parseCharJson } from "./51-session-import.js?v=4i";
+import { $, CHAR_Z, S, visibleChar, isStand, canEdit, showsParams, showsOther, canSeeParams, canSeeOther, el, setStatus, randomId, faceList, charIcon, src, rp, sorted, playerName } from "./51-session-core.js?v=4i";
+import { showTab } from "./51-session-layout.js?v=4i";
+import { setSpeaker } from "./51-session-chat.js?v=4i";
+import { uploadAsset, centerPos } from "./51-session-board.js?v=4i";
 
 export function initChars() {
   $("pieceAdd").addEventListener("click", addChar);

@@ -1,10 +1,10 @@
-import { set, update } from "./51-session-fb.js?v=4g";
-import { compressImage } from "./51-session-import.js?v=4g";
-import { $, UNIT, PAD, FG_Z, S, visibleChar, isStand, canSeeOther, el, blurInput, setStatus, newKey, charIcon, src, rp, objPath } from "./51-session-core.js?v=4g";
-import { showTab } from "./51-session-layout.js?v=4g";
-import { setSpeaker, sendChat } from "./51-session-chat.js?v=4g";
-import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4g";
-import { selectObj } from "./51-session-kp.js?v=4g";
+import { set, update } from "./51-session-fb.js?v=4i";
+import { compressImage } from "./51-session-import.js?v=4i";
+import { $, UNIT, PAD, FG_Z, S, visibleChar, isStand, canSeeOther, el, blurInput, setStatus, newKey, charIcon, src, rp, objPath } from "./51-session-core.js?v=4i";
+import { showTab } from "./51-session-layout.js?v=4i";
+import { setSpeaker, sendChat } from "./51-session-chat.js?v=4i";
+import { renderCharList, renderCharDetail } from "./51-session-chars.js?v=4i";
+import { selectObj } from "./51-session-kp.js?v=4i";
 
 export function refreshAvatars() {
   document.querySelectorAll("img[data-asset]").forEach((im) => {

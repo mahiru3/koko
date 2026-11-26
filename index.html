@@ -4,10 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>koko</title>
-  <link rel="stylesheet" href="51-session.css?v=4g">
-  <script src="51-session-bcdice.js?v=4g"></script>
-  <script src="51-session-jszip.js?v=4g"></script>
-  <script type="module" src="51-session.js?v=4g"></script>
+  <link rel="stylesheet" href="51-session.css?v=4i">
+  <script src="51-session-bcdice.js?v=4i"></script>
+  <script src="51-session-jszip.js?v=4i"></script>
+  <script type="module" src="51-session.js?v=4i"></script>
 </head>
 <body>
   <p class="boot-warn">画面が切り替わらない場合は、ファイルが足りない可能性があります。mahiru3/koko の直下に、渡されたファイルが全部あるか確認してください。</p>
@@ -41,7 +41,7 @@
       <span class="me"><span id="meName" class="me-name"></span><span id="kpBadge" class="kp-badge" hidden>KP</span></span>
       <button id="themeBtn" type="button" class="theme-btn">ライト</button>
       <button id="layoutReset" type="button" hidden>配置を元に戻す</button>
-      <span class="ver">v4g</span>
+      <span class="ver">v4i</span>
     </header>
 
     <section id="boardWrap" class="board-wrap">
@@ -67,6 +67,14 @@
           <label class="tool" title="発言の文字の色">文字色<input id="chatColor" type="color" value="#dddddd"></label>
           <button id="chatColorReset" type="button" class="mini" title="文字色を元に戻す">元の色</button>
           <span id="diceBtns" class="dice-btns"></span>
+          <button id="logBtn" type="button" class="mini" title="自分に見えている発言をダウンロード">ログ</button>
+        </div>
+        <div id="logMenu" class="log-menu" hidden>
+          <span class="msg">ココフォリアと同じ形式で、自分に見えている発言を書き出します</span>
+          <button type="button" data-fmt="zip">HTML（すべて＋タブごと・zip）</button>
+          <button type="button" data-fmt="old">HTML（旧形式・[all].html）</button>
+          <button type="button" data-fmt="json">JSON</button>
+          <span id="logMsg" class="msg"></span>
         </div>
         <div id="myStatus" class="my-status mobile-only" hidden></div>
         <div id="chatBonus" class="bonus mobile-only"></div>
@@ -95,8 +103,8 @@
         <details class="acc-color-3">
           <summary>チャットのタブ</summary>
           <ul id="chanList" class="mlist"></ul>
-          <div class="row wrap"><button id="chanAdd2" type="button">タブを追加</button></div>
-          <p class="msg">色はチャットウィンドウのタブと、PLパレットの発言場所のボタンに付きます</p>
+          <div class="row wrap"><button id="chanAdd2" type="button">タブを追加</button><button id="chanAddSecret" type="button">🔒秘匿タブを追加</button></div>
+          <p class="msg">色はチャットウィンドウのタブと、PLパレットの発言場所のボタンに付きます。秘匿タブは、チェックを入れた参加者とKPだけが見られます（ほかのPLにはタブごと見えません）</p>
         </details>
         <details class="acc-color-2">
           <summary>CT使用（クリチケ）</summary>
@@ -113,6 +121,12 @@
             <label class="file-btn">room.zip を選ぶ<input id="zipFile" type="file" accept=".zip,application/zip"></label>
             <label class="check"><input id="zipReplace" type="checkbox" checked>今の盤面・キャラ・シーン・テキストを置き換える</label>
             <p id="zipMsg" class="msg"></p>
+          </div>
+          <div class="field owner-only">チャットのログを削除（部屋を作ったKPだけ）
+            <span class="row">
+              <select id="logDelTab"></select>
+              <button id="logDelBtn" type="button" class="del">ログを削除</button>
+            </span>
           </div>
           <div class="row wrap">
             <button id="assetsDelAll" type="button" class="del">部屋の画像を全て削除</button>
@@ -183,6 +197,7 @@
           <div class="pal-place">
             <span class="pal-place-title">発言場所</span>
             <div id="palPlaceBtns" class="place-btns"></div>
+            <div id="palDest" class="pal-dest"></div>
           </div>
         </div>
         <div id="palFaceList" class="faces pal-faces" hidden></div>
